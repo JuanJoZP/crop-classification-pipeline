@@ -27,22 +27,37 @@ After step 4, the acquisition + dataset prep pipeline is complete — ready for 
 
 - `src/processing/` — data processing package
 - `src/training/` — model training package
-- `infra/` — Terraform AWS infrastructure (root module, calls submodules)
-- `infra/iam/` — IAM module (one role per file, detached policies in `policies.tf`)
+- `src/lambdas/crawl_polygons/` — Lambda source for polygon crawl
+- `infra/` — Terraform AWS root module (calls submodules)
+- `infra/iam/` — IAM module (one role per file, 12 detached policies in `policies.tf`)
+- `infra/modules/s3/` — S3 bucket with encryption, public access block, lifecycle rules
+- `infra/modules/lambda/` — Generic Lambda module (zip + deploy, pip install, git SHA in description)
+- `infra/modules/feature-store/` — SageMaker Feature Group + offline store (Glue catalog)
+- `infra/budgets/` — AWS Budgets monthly cost alert
 - `workflows/` — Step Functions definitions
+
+## Infrastructure modules
+
+| Module | Source | Creates |
+|---|---|---|
+| `s3` | `./modules/s3` | S3 bucket (versioning disabled, SSE-S3, public access blocked, lifecycle: `raw/` expires 7d, `processed/` expires 30d) |
+| `iam` | `./iam` | 6 IAM roles + 12 detached policies scoped to bucket prefixes |
+| `lambda_crawl_polygons` | `./modules/lambda` | Lambda function with pip install, zip deploy, git SHA |
+| `feature_store` | `./modules/feature-store` | SageMaker Feature Group `crop-polygon-features` (5 features, offline store to S3 + Glue) |
+| `budgets` | `./budgets` | AWS Budgets monthly alert ($1/mo default) |
 
 ## IAM roles
 
 | Role | Belongs to | Can do |
 |---|---|---|
 | `fargate-image-copy` | Fargate task | Write `raw/`, read public S3 |
-| `lambda-polygon-crawl` | Lambda | HTTP calls to UPRA API, CloudWatch Logs |
+| `lambda-polygon-crawl` | Lambda | CloudWatch Logs (basic execution) |
 | `ecs-task-execution` | ECS agent | Pull ECR images, write CloudWatch Logs |
 | `sagemaker-processing-silver` | SageMaker | Read `raw/`, write `processed/` |
-| `sagemaker-processing-gold` | SageMaker | Read `processed/`, write Feature Store |
-| `step-functions` | Step Functions | Invoke Lambda, run ECS/SageMaker, PassRole |
+| `sagemaker-processing-gold` | SageMaker | Read `processed/`, write Feature Store + `feature-store/` prefix, Glue catalog, CloudWatch |
+| `step-functions` | Step Functions | Invoke Lambda, run ECS/SageMaker, PassRole for ECS + SageMaker roles |
 
-S3 bucket prefixes follow medallion architecture: `raw/` (bronze), `processed/` (silver), Feature Store (gold).
+S3 bucket prefixes follow medallion architecture: `raw/` (bronze), `processed/` (silver), `feature-store/` (gold), Feature Store (gold).
 
 ## Commands
 

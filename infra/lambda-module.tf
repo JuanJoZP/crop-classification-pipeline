@@ -4,7 +4,7 @@ locals {
 }
 
 module "lambda_crawl_polygons" {
-  source               = "./lambda"
+  source               = "./modules/lambda"
   function_name        = "${var.project_prefix}-crawl-polygons"
   function_description = "Crawlea los polígonos, label y metadatos del dataset del UPRA"
   handler              = "lambda_handler.handler"
