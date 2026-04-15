@@ -3,3 +3,8 @@ variable "bucket_name" {
   type        = string
   default     = "crop-classification-data"
 }
+
+variable "budget_alert_email" {
+  description = "Email address for budget alerts"
+  type        = string
+}
