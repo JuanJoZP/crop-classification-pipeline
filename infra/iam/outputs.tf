@@ -33,3 +33,11 @@ output "step_functions_role_arn" {
 output "step_functions_role_name" {
   value = aws_iam_role.step_functions.name
 }
+
+output "lambda_polygon_crawl_role_arn" {
+  value = aws_iam_role.lambda_polygon_crawl.arn
+}
+
+output "lambda_polygon_crawl_role_name" {
+  value = aws_iam_role.lambda_polygon_crawl.name
+}

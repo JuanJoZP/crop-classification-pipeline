@@ -4,6 +4,12 @@ variable "bucket_name" {
   default     = "crop-classification-data"
 }
 
+variable "project_prefix" {
+  description = "Prefix for all resource names"
+  type        = string
+  default     = "crop-classification"
+}
+
 variable "budget_alert_email" {
   description = "Email address for budget alerts"
   type        = string
