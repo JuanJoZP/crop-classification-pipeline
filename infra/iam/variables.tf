@@ -12,5 +12,5 @@ variable "project_prefix" {
 variable "feature_group_names" {
   description = "SageMaker Feature Group names to allow in IAM policies"
   type        = list(string)
-  default     = ["crop_features"]
+  default     = ["crop-polygon-features"]
 }

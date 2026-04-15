@@ -149,6 +149,83 @@ resource "aws_iam_policy" "sagemaker_featurestore_ingest" {
   })
 }
 
+resource "aws_iam_policy" "s3_write_feature_store" {
+  name        = "s3-write-feature-store-${var.bucket_name}"
+  description = "Write access to feature-store/ prefix in the project bucket"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:DeleteObject"
+        ]
+        Resource = "${local.bucket_arn}/feature-store/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket"
+        ]
+        Resource = local.bucket_arn
+        Condition = {
+          StringLike = {
+            "s3:prefix" = ["feature-store/*"]
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_policy" "glue_feature_store" {
+  name        = "glue-feature-store"
+  description = "Glue permissions for SageMaker Feature Store offline catalog"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "glue:CreateTable",
+          "glue:UpdateTable",
+          "glue:GetTable",
+          "glue:GetTableVersions",
+          "glue:GetPartition",
+          "glue:GetPartitions",
+          "glue:BatchGetPartition",
+          "glue:GetDatabase"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_policy" "cloudwatch_feature_store" {
+  name        = "cloudwatch-feature-store"
+  description = "CloudWatch Logs permissions for SageMaker Feature Store"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:log-group:/aws/sagemaker/*"
+      }
+    ]
+  })
+}
+
 resource "aws_iam_policy" "s3_read_public" {
   name        = "s3-read-public"
   description = "Read access to public S3 buckets for image ingestion"

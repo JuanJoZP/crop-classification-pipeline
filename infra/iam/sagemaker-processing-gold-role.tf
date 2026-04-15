@@ -12,3 +12,18 @@ resource "aws_iam_role_policy_attachment" "sagemaker_processing_gold_featurestor
   role       = aws_iam_role.sagemaker_processing_gold.name
   policy_arn = aws_iam_policy.sagemaker_featurestore_ingest.arn
 }
+
+resource "aws_iam_role_policy_attachment" "sagemaker_processing_gold_s3_write_feature_store" {
+  role       = aws_iam_role.sagemaker_processing_gold.name
+  policy_arn = aws_iam_policy.s3_write_feature_store.arn
+}
+
+resource "aws_iam_role_policy_attachment" "sagemaker_processing_gold_glue" {
+  role       = aws_iam_role.sagemaker_processing_gold.name
+  policy_arn = aws_iam_policy.glue_feature_store.arn
+}
+
+resource "aws_iam_role_policy_attachment" "sagemaker_processing_gold_cloudwatch" {
+  role       = aws_iam_role.sagemaker_processing_gold.name
+  policy_arn = aws_iam_policy.cloudwatch_feature_store.arn
+}
