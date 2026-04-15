@@ -1,0 +1,20 @@
+[project]
+name = "crop-classification-pipeline"
+version = "0.1.0"
+description = "ML pipeline for crop classification on AWS"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.uv]
+package = true
+
+[tool.uv.sources]
+crop-classification-pipeline = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/processing", "src/training"]
