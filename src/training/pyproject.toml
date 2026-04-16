@@ -1,0 +1,13 @@
+[project]
+name = "training"
+version = "0.1.0"
+description = "Model training for crop classification pipeline"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.hatch.build.targets.wheel]
+packages = ["training"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
