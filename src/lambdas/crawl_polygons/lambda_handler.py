@@ -1,24 +1,34 @@
 import json
-import os
+from typing import Any, Dict
 
-import httpx
+from endpoints.crawl_polygons import handle as crawl_polygons
+from endpoints.list_municipalities import handle as list_municipalities
 
-UPRA_GEOSERVICIOS_URL = os.environ["UPRA_GEOSERVICIOS_URL"]
+ROUTERS = {
+    "crawl_polygons": crawl_polygons,
+    "list_municipalities": list_municipalities,
+}
 
 
-def handler(event, context):
-    try:
-        polygons = _fetch_polygons(event)
+def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    action = event.get("action", "crawl_polygons")
+
+    route = ROUTERS.get(action)
+    if route is None:
         return {
-            "statusCode": 200,
-            "body": json.dumps({"polygons": polygons}),
+            "statusCode": 400,
+            "body": json.dumps(
+                {
+                    "error": f"Unknown action: '{action}'.",
+                    "available_actions": list(ROUTERS.keys()),
+                }
+            ),
         }
+
+    try:
+        return route(event)
     except Exception as e:
         return {
             "statusCode": 500,
             "body": json.dumps({"error": str(e)}),
         }
-
-
-def _fetch_polygons(event):
-    raise NotImplementedError("UPRA API integration pending")
