@@ -245,6 +245,36 @@ resource "aws_iam_policy" "s3_read_public" {
   })
 }
 
+resource "aws_iam_policy" "s3_read_polygons" {
+  name        = "s3-read-polygons-${var.bucket_name}"
+  description = "Read access to polygons/ prefix in the project bucket"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject"
+        ]
+        Resource = "${local.bucket_arn}/polygons/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket"
+        ]
+        Resource = local.bucket_arn
+        Condition = {
+          StringLike = {
+            "s3:prefix" = ["polygons/*"]
+          }
+        }
+      }
+    ]
+  })
+}
+
 resource "aws_iam_policy" "s3_write_polygons" {
   name        = "s3-write-polygons-${var.bucket_name}"
   description = "Write access to polygons/ prefix for Lambda crawl-polygons"
