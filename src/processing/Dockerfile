@@ -1,5 +1,7 @@
 FROM python:3.10-slim
 
+ARG GIT_SHA=unknown
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gdal-bin \
     && rm -rf /var/lib/apt/lists/*
@@ -14,5 +16,7 @@ COPY src/ src/
 
 RUN uv venv && \
     uv sync --frozen --no-dev --package processing
+
+ENV GIT_SHA=${GIT_SHA}
 
 CMD ["sh", "-c", "uv run --package processing python -m ${PROCESSING_STEP:-bronze}.main"]
