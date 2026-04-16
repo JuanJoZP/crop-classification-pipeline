@@ -141,6 +141,7 @@ infra/*.tfstate.backup
 infra/.terraform.tfstate.lock.info
 infra/tfplan
 infra/**/*.zip
+infra/**/deps/
 
 # Lambda dependencies (installed by pip -t)
 src/lambdas/**/*.dist-info/
