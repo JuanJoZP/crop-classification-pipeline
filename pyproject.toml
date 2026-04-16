@@ -12,3 +12,14 @@ members = ["src/processing", "src/training"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.pylint.messages_control]
+disable = [
+    "C0114", # missing-module-docstring
+    "C0115", # missing-class-docstring
+    "C0116", # missing-function-docstring
+    "R0903", # too-few-public-methods (útil para clases de datos)
+]
+
+[tool.pylint.basic]
+no-docstring-rgx = "^(_|_.*)$"
