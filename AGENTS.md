@@ -59,6 +59,67 @@ After step 4, the acquisition + dataset prep pipeline is complete — ready for 
 
 S3 bucket prefixes follow medallion architecture: `raw/` (bronze), `processed/` (silver), `feature-store/` (gold), Feature Store (gold).
 
+## Lambda detail: `crawl_polygons`
+
+The Lambda is dispatched by `event["action"]` (defaults to `"crawl_polygons"`):
+
+| Action | Handler |
+|---|---|
+| `"crawl_polygons"` | `endpoints/crawl_polygons.handle()` |
+| `"list_municipalities"` | `endpoints/list_municipalities.handle()` |
+
+### UPRA API (ArcGIS)
+
+Base URL: `https://geoservicios.upra.gov.co/arcgis/rest/services/MonitoreoCultivos/{service}/MapServer/0/query`
+
+Services follow the pattern `{crop}_{year}_s{semester}` (e.g. `arroz_2021_s1`), defined in `VALID_PERIODS`.
+
+#### Endpoint A — Polygon query (`crawl_polygons` action)
+
+| Param | Value |
+|---|---|
+| `where` | `municipio='{municipality}'` |
+| `outFields` | `objectid,cultivo,municipio,departamen,periodo,intervalo` |
+| `f` | `geojson` |
+| `outSR` | `4326` |
+
+Returns ArcGIS GeoJSON `FeatureCollection` with `features[].properties = {objectid, cultivo, municipio, departamen, periodo, intervalo}` and `features[].geometry = Polygon`.
+
+Transform: each Feature is flattened into `{...properties, geometry, service, acquisition_date}`, then reassembled via `rows_to_geojson()` back into a GeoJSON FeatureCollection with two extra properties per feature: `service` (ArcGIS service name) and `acquisition_date` (ISO UTC timestamp), plus a top-level `"count"`.
+
+#### Endpoint B — Distinct municipalities (`list_municipalities` action)
+
+| Param | Value |
+|---|---|
+| `where` | `1=1` |
+| `outFields` | `municipio,departamen` |
+| `returnDistinctValues` | `true` |
+| `returnGeometry` | `false` |
+| `f` | `json` |
+
+Returns ArcGIS JSON `FeatureSet` with `features[].attributes = {municipio, departamen}`. Called once per service for the given crop, deduplicated by `(municipio, departamen)`, sorted by `(departamen, municipio)`.
+
+### S3 outputs
+
+#### `crawl_polygons` action
+
+- **Key**: `polygons/crawl_polygons_{timestamp}.json` (timestamp format `%Y%m%dT%H%M%SZ`)
+- **Body**: GeoJSON FeatureCollection `{type, features: [{type: "Feature", geometry: {type: "Polygon", coordinates}, properties: {objectid, cultivo, municipio, departamen, periodo, intervalo, service, acquisition_date}}], count}`
+- **Metadata**: `action=crawl_polygons`, `municipios=["..."]`, `periodos=["..."]`, `timestamp=...`
+
+#### `list_municipalities` action
+
+- **Key**: `polygons/list_municipalities_{timestamp}.json`
+- **Body**: `{crop: "arroz", count: 42, municipalities: [{municipio, departamen}, ...]}`
+- **Metadata**: `action=list_municipalities`, `crop=arroz`, `timestamp=...`
+
+### Transformation summary
+
+| Action | HTTP response → intermediate → S3 output |
+|---|---|
+| `crawl_polygons` | ArcGIS GeoJSON FeatureCollection → flat rows `{...properties, geometry, service, acquisition_date}` → GeoJSON FeatureCollection with extra `service` + `acquisition_date` properties + `count` |
+| `list_municipalities` | ArcGIS JSON FeatureSet `features[].attributes` → deduplicated `{municipio, departamen}` list → `{crop, count, municipalities}` envelope |
+
 ## Commands
 
 - `uv sync` — install dependencies and sync virtual environment
