@@ -38,7 +38,7 @@ def _upload_to_s3(data: bytes, key: str, metadata: Dict[str, str]) -> str:
     return key
 
 
-def handle(event: Dict[str, Any]) -> Dict[str, Any]:
+def handle(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     municipios, periodos = _parse_event(event)
 
     if not municipios or not periodos:
@@ -83,6 +83,8 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
         "municipios": json.dumps(municipios),
         "periodos": json.dumps(periodos),
         "timestamp": timestamp,
+        "lambda-version": context.function_version,
+        "invoked-arn": context.invoked_function_arn,
     }
 
     s3_key = _upload_to_s3(
@@ -100,6 +102,8 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
                 "municipios": municipios,
                 "periodos": periodos,
                 "timestamp": timestamp,
+                "lambda-version": context.function_version,
+                "invoked-arn": context.invoked_function_arn,
             }
         ),
     }

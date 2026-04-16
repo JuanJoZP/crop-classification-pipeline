@@ -26,7 +26,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         }
 
     try:
-        return route(event)
+        return route(event, context)
     except Exception as e:
         return {
             "statusCode": 500,

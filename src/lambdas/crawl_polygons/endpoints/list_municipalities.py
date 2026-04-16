@@ -23,7 +23,7 @@ def _upload_to_s3(data: bytes, key: str, metadata: Dict[str, str]) -> str:
     return key
 
 
-def handle(event: Dict[str, Any]) -> Dict[str, Any]:
+def handle(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     crop = event.get("crop") or event.get("body", {}).get("crop") or ""
     crop = str(crop).strip()
 
@@ -62,6 +62,8 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
         "action": "list_municipalities",
         "crop": crop,
         "timestamp": timestamp,
+        "lambda-version": context.function_version,
+        "invoked-arn": context.invoked_function_arn,
     }
 
     s3_key = _upload_to_s3(
@@ -78,6 +80,8 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
                 "crop": crop,
                 "count": len(municipalities),
                 "timestamp": timestamp,
+                "lambda-version": context.function_version,
+                "invoked-arn": context.invoked_function_arn,
             }
         ),
     }
