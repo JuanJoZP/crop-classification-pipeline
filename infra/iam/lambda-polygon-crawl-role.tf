@@ -18,3 +18,8 @@ resource "aws_iam_role_policy_attachment" "lambda_polygon_crawl_logs" {
   role       = aws_iam_role.lambda_polygon_crawl.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
+
+resource "aws_iam_role_policy_attachment" "lambda_polygon_crawl_s3_write" {
+  role       = aws_iam_role.lambda_polygon_crawl.name
+  policy_arn = aws_iam_policy.s3_write_polygons.arn
+}

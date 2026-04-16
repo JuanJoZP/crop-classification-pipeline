@@ -65,4 +65,17 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
       days = var.processed_expiration_days
     }
   }
+
+  rule {
+    id     = "${var.project_prefix}-polygons-expire"
+    status = "Enabled"
+
+    filter {
+      prefix = "polygons/"
+    }
+
+    expiration {
+      days = var.polygons_expiration_days
+    }
+  }
 }

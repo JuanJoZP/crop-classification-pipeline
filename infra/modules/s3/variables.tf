@@ -20,3 +20,9 @@ variable "processed_expiration_days" {
   type        = number
   default     = 30
 }
+
+variable "polygons_expiration_days" {
+  description = "Days before expiring objects in the polygons/ prefix"
+  type        = number
+  default     = 1
+}

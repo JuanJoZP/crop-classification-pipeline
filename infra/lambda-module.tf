@@ -14,5 +14,7 @@ module "lambda_crawl_polygons" {
 
   environment_variables = {
     UPRA_GEOSERVICIOS_URL = "https://geoservicios.upra.gov.co/arcgis/rest/services"
+    S3_BUCKET             = var.bucket_name
+    S3_PREFIX             = "polygons"
   }
 }
