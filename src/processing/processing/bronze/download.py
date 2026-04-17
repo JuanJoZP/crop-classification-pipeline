@@ -7,7 +7,7 @@ import odc.stac
 import pystac_client
 import s3fs
 import xarray as xr
-from bronze.config import load_config
+from processing.bronze.config import load_config
 
 logger = logging.getLogger(__name__)
 

@@ -4,10 +4,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
 import s3fs as s3fs_lib
-from bronze.config import get_copernicus_creds, load_config
-from bronze.download import download_polygon
-from bronze.io import load_polygons, upload_sidecar
-from bronze.sidecar import build_sidecar, polygon_id
+from processing.bronze.config import get_copernicus_creds, load_config
+from processing.bronze.download import download_polygon
+from processing.bronze.io import load_polygons, upload_sidecar
+from processing.bronze.sidecar import build_sidecar, polygon_id
 
 S3_BUCKET = os.environ["S3_BUCKET"]
 POLYGONS_KEY = os.environ["POLYGONS_KEY"]
