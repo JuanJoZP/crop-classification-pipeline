@@ -47,13 +47,12 @@ def log_metrics(stop_event: threading.Event, total: int):
         stop_event.wait(METRICS_INTERVAL)
 
 
-def process_polygon(
-    row, config: dict, copernicus_creds: dict, s3: s3fs_lib.S3FileSystem
-):
+def process_polygon(row, config: dict, copernicus_creds: dict):
     global completed
     pid = polygon_id(row)
     logger.info("Processing polygon %s", pid)
 
+    s3 = s3fs_lib.S3FileSystem(anon=False)
     t0 = time.monotonic()
     zarr_key, volume = download_polygon(pid, row, config, copernicus_creds, s3)
     elapsed = time.monotonic() - t0
@@ -83,7 +82,6 @@ def main():
 
     cpu_count = os.cpu_count() or 1
     max_workers = config["workers_per_core"] * cpu_count
-    s3 = s3fs_lib.S3FileSystem(anon=False, max_connections=max_workers)
 
     logger.info(
         "Starting bronze processing: %d polygons, %d workers",
@@ -102,7 +100,7 @@ def main():
     try:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
-                executor.submit(process_polygon, row, config, copernicus_creds, s3): idx
+                executor.submit(process_polygon, row, config, copernicus_creds): idx
                 for idx, row in gdf.iterrows()
             }
             for future in as_completed(futures):
