@@ -58,7 +58,7 @@ def process_polygon(
 
     processing_timestamp = datetime.now(timezone.utc).isoformat()
     sidecar = build_sidecar(row, processing_timestamp, GIT_SHA, POLYGONS_KEY)
-    sidecar["processing_metadata"]["zarr_key"] = zarr_key
+    sidecar["processing_bronze_metadata"]["zarr_key"] = zarr_key
     upload_sidecar(pid, sidecar)
     logger.info("Polygon %s complete", pid)
     with completed_lock:
