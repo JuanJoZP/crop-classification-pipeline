@@ -87,7 +87,7 @@ def download_polygon(
     config: dict,
     copernicus_creds: dict,
     s3: s3fs.S3FileSystem,
-) -> str:
+) -> tuple:
     geometry = row.geometry
     cultivo = row["cultivo"]
     periodo = row["service"]
@@ -96,7 +96,7 @@ def download_polygon(
     items = search_items(geometry, cultivo, periodo, max_cloud_cover, config)
     if not items:
         logger.warning("No items for %s, skipping", pid)
-        return None
+        return None, 0
 
     odc.stac.configure_rio(
         aws={
@@ -120,4 +120,5 @@ def download_polygon(
     )
     logger.info("Loaded dataset for %s: %s", pid, dataset)
 
-    return write_zarr(pid, dataset, s3)
+    volume = dataset.dims.get("time", 1) * row.geometry.area
+    return write_zarr(pid, dataset, s3), volume

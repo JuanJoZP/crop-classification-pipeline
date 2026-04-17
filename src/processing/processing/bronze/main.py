@@ -2,6 +2,7 @@ import logging
 import os
 import threading
 import time
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
@@ -22,6 +23,8 @@ logger = logging.getLogger(__name__)
 
 completed = 0
 completed_lock = threading.Lock()
+job_stats_lock = threading.Lock()
+job_stats = defaultdict(list)
 
 
 def log_metrics(stop_event: threading.Event, total: int):
@@ -51,10 +54,16 @@ def process_polygon(
     pid = polygon_id(row)
     logger.info("Processing polygon %s", pid)
 
-    zarr_key = download_polygon(pid, row, config, copernicus_creds, s3)
+    t0 = time.monotonic()
+    zarr_key, volume = download_polygon(pid, row, config, copernicus_creds, s3)
+    elapsed = time.monotonic() - t0
     if zarr_key is None:
         logger.warning("No data for %s, skipping sidecar", pid)
         return
+
+    with job_stats_lock:
+        job_stats["elapsed"].append(elapsed)
+        job_stats["volume"].append(volume)
 
     processing_timestamp = datetime.now(timezone.utc).isoformat()
     sidecar = build_sidecar(row, processing_timestamp, GIT_SHA, POLYGONS_KEY)
@@ -104,6 +113,22 @@ def main():
     finally:
         stop_event.set()
         metrics_thread.join(timeout=5)
+
+    if job_stats["elapsed"]:
+        n = len(job_stats["elapsed"])
+        avg_time = sum(job_stats["elapsed"]) / n
+        avg_volume = sum(job_stats["volume"]) / n
+        logger.info(
+            "SUMMARY workers=%d jobs=%d avg_time=%.1fs avg_volume=%.6fdeg2",
+            max_workers,
+            n,
+            avg_time,
+            avg_volume,
+        )
+    else:
+        logger.info(
+            "SUMMARY workers=%d jobs=0 avg_time=0s avg_volume=0deg2", max_workers
+        )
 
     logger.info("Bronze processing complete for %d polygons", len(gdf))
 
