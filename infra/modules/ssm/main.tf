@@ -72,9 +72,9 @@ resource "aws_ssm_parameter" "bronze_dtype" {
   value       = var.bronze_dtype
 }
 
-resource "aws_ssm_parameter" "bronze_workers_per_core" {
-  name        = "/${var.project_prefix}/bronze/workers_per_core"
-  description = "ThreadPoolExecutor workers per CPU core"
+resource "aws_ssm_parameter" "bronze_workers" {
+  name        = "/${var.project_prefix}/bronze/workers"
+  description = "Number of ThreadPoolExecutor workers for bronze processing"
   type        = "String"
-  value       = tostring(var.bronze_workers_per_core)
+  value       = tostring(var.bronze_workers)
 }

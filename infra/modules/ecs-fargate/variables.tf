@@ -17,13 +17,13 @@ variable "container_image" {
 variable "cpu" {
   description = "CPU units for the Fargate task (valid: 256, 512, 1024, 2048, 4096)"
   type        = number
-  default     = 1024
+  default     = 512
 }
 
 variable "memory" {
   description = "Memory (MiB) for the Fargate task (must be valid for the CPU value)"
   type        = number
-  default     = 2048
+  default     = 512
 }
 
 variable "task_role_arn" {

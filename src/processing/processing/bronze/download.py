@@ -120,5 +120,9 @@ def download_polygon(
     )
     logger.info("Loaded dataset for %s: %s", pid, dataset)
 
-    volume = dataset.dims.get("time", 1) * row.geometry.area
+    volume = (
+        dataset.dims.get("time", 1)
+        * dataset.dims.get("longitude", 1)
+        * dataset.dims.get("latitude", 1)
+    )
     return write_zarr(pid, dataset, s3), volume

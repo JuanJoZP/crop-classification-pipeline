@@ -77,8 +77,7 @@ def main():
     logger.info("Columns: %s", list(gdf.columns))
     logger.info("CRS: %s", gdf.crs)
 
-    cpu_count = os.cpu_count() or 1
-    max_workers = config["workers_per_core"] * cpu_count
+    max_workers = config["workers"]
 
     logger.info(
         "Starting bronze processing: %d polygons, %d workers",

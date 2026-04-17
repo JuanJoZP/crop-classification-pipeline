@@ -52,8 +52,8 @@ variable "bronze_dtype" {
   default     = "uint16"
 }
 
-variable "bronze_workers_per_core" {
-  description = "ThreadPoolExecutor workers per CPU core"
+variable "bronze_workers" {
+  description = "Number of ThreadPoolExecutor workers for bronze processing"
   type        = number
-  default     = 20
+  default     = 2
 }

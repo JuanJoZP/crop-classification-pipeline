@@ -50,7 +50,5 @@ def load_config() -> dict:
             "dtype": _get_param("bronze/dtype"),
         },
         "max_cloud_cover": float(_get_param("bronze/max_cloud_cover")),
-        "workers_per_core": int(
-            os.environ.get("WORKERS_PER_CORE", _get_param("bronze/workers_per_core"))
-        ),
+        "workers": int(os.environ.get("WORKERS", _get_param("bronze/workers"))),
     }

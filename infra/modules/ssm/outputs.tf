@@ -10,6 +10,6 @@ output "parameter_names" {
     [aws_ssm_parameter.bronze_resolution.name],
     [aws_ssm_parameter.bronze_crs.name],
     [aws_ssm_parameter.bronze_dtype.name],
-    [aws_ssm_parameter.bronze_workers_per_core.name],
+    [aws_ssm_parameter.bronze_workers.name],
   )
 }
