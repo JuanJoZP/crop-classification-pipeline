@@ -2,7 +2,6 @@ import logging
 import os
 import threading
 import time
-from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
@@ -24,7 +23,7 @@ logger = logging.getLogger(__name__)
 completed = 0
 completed_lock = threading.Lock()
 job_stats_lock = threading.Lock()
-job_stats = defaultdict(list)
+total_volume = 0
 
 
 def log_metrics(stop_event: threading.Event, total: int):
@@ -53,16 +52,14 @@ def process_polygon(row, config: dict, copernicus_creds: dict):
     logger.info("Processing polygon %s", pid)
 
     s3 = s3fs_lib.S3FileSystem(anon=False)
-    t0 = time.monotonic()
     zarr_key, volume = download_polygon(pid, row, config, copernicus_creds, s3)
-    elapsed = time.monotonic() - t0
     if zarr_key is None:
         logger.warning("No data for %s, skipping sidecar", pid)
         return
 
+    global total_volume
     with job_stats_lock:
-        job_stats["elapsed"].append(elapsed)
-        job_stats["volume"].append(volume)
+        total_volume += volume
 
     processing_timestamp = datetime.now(timezone.utc).isoformat()
     sidecar = build_sidecar(row, processing_timestamp, GIT_SHA, POLYGONS_KEY)
@@ -91,6 +88,9 @@ def main():
 
     global completed
     completed = 0
+    global total_volume
+    total_volume = 0
+    wall_start = time.monotonic()
     stop_event = threading.Event()
     metrics_thread = threading.Thread(
         target=log_metrics, args=(stop_event, len(gdf)), daemon=True
@@ -112,20 +112,26 @@ def main():
         stop_event.set()
         metrics_thread.join(timeout=5)
 
-    if job_stats["elapsed"]:
-        n = len(job_stats["elapsed"])
-        avg_time = sum(job_stats["elapsed"]) / n
-        avg_volume = sum(job_stats["volume"]) / n
+    wall_elapsed = time.monotonic() - wall_start
+    n_ok = completed
+    if n_ok > 0:
+        avg_time = wall_elapsed / n_ok
+        avg_volume = total_volume / n_ok
         logger.info(
-            "SUMMARY workers=%d jobs=%d avg_time=%.1fs avg_volume=%.6fdeg2",
+            "SUMMARY workers=%d jobs_ok=%d/%d wall_time=%.1fs avg_time=%.1fs/job avg_volume=%.0fpx",
             max_workers,
-            n,
+            n_ok,
+            len(gdf),
+            wall_elapsed,
             avg_time,
             avg_volume,
         )
     else:
         logger.info(
-            "SUMMARY workers=%d jobs=0 avg_time=0s avg_volume=0deg2", max_workers
+            "SUMMARY workers=%d jobs_ok=0/%d wall_time=%.1fs avg_volume=0px",
+            max_workers,
+            len(gdf),
+            wall_elapsed,
         )
 
     logger.info("Bronze processing complete for %d polygons", len(gdf))
