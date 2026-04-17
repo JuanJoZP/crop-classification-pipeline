@@ -23,7 +23,7 @@ variable "cpu" {
 variable "memory" {
   description = "Memory (MiB) for the Fargate task (must be valid for the CPU value)"
   type        = number
-  default     = 512
+  default     = 1024
 }
 
 variable "task_role_arn" {
