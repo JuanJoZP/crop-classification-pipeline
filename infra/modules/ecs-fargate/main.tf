@@ -12,7 +12,7 @@ data "aws_subnets" "default" {
 data "aws_region" "current" {}
 
 data "external" "git_commit" {
-  program = ["git", "rev-parse", "--short", "HEAD"]
+  program = ["${path.module}/../../scripts/git_commit.sh"]
 }
 
 resource "aws_ecs_cluster" "this" {
@@ -66,7 +66,6 @@ resource "aws_ecs_task_definition" "this" {
 
       environment = [
         { name = "S3_BUCKET", value = var.bucket_name },
-        { name = "STAC_CATALOG_URL", value = var.stac_catalog_url },
         { name = "PROCESSING_STEP", value = var.processing_step },
         { name = "GIT_SHA", value = data.external.git_commit.result.commit },
       ]

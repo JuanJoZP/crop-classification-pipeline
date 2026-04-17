@@ -3,6 +3,10 @@ locals {
   python_runtime = "python${regex("^[0-9]+\\.[0-9]+", local.python_version)}"
 }
 
+data "external" "git_commit" {
+  program = ["${path.module}/scripts/git_commit.sh"]
+}
+
 module "lambda_crawl_polygons" {
   source               = "./modules/lambda"
   function_name        = "${var.project_prefix}-crawl-polygons"
@@ -16,5 +20,6 @@ module "lambda_crawl_polygons" {
     UPRA_GEOSERVICIOS_URL = "https://geoservicios.upra.gov.co/arcgis/rest/services"
     S3_BUCKET             = var.bucket_name
     S3_PREFIX             = "polygons"
+    GIT_SHA               = data.external.git_commit.result.commit
   }
 }

@@ -41,12 +41,6 @@ variable "bucket_name" {
   type        = string
 }
 
-variable "stac_catalog_url" {
-  description = "STAC catalog URL passed as STAC_CATALOG_URL env var"
-  type        = string
-  default     = "https://earth-search.aws.element84.com/v1"
-}
-
 variable "processing_step" {
   description = "Default processing step (bronze, silver, gold) - can be overridden via containerOverrides at runtime"
   type        = string

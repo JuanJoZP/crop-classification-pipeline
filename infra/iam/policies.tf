@@ -168,14 +168,10 @@ resource "aws_iam_policy" "s3_write_feature_store" {
       {
         Effect = "Allow"
         Action = [
+          "s3:GetBucketAcl",
           "s3:ListBucket"
         ]
         Resource = local.bucket_arn
-        Condition = {
-          StringLike = {
-            "s3:prefix" = ["feature-store/*"]
-          }
-        }
       }
     ]
   })
@@ -271,6 +267,25 @@ resource "aws_iam_policy" "s3_read_polygons" {
           }
         }
       }
+    ]
+  })
+}
+
+resource "aws_iam_policy" "ssm_read_processor" {
+  name        = "ssm-read-processor-${var.project_prefix}"
+  description = "Read processor config and Copernicus S3 credentials from SSM Parameter Store"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameter",
+          "ssm:GetParameters",
+        ]
+        Resource = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/${var.project_prefix}/*"
+      },
     ]
   })
 }

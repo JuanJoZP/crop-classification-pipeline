@@ -19,4 +19,4 @@ RUN uv venv && \
 
 ENV GIT_SHA=${GIT_SHA}
 
-CMD ["sh", "-c", "uv run --package processing python -m ${PROCESSING_STEP:-bronze}.main"]
+CMD ["sh", "-c", "uv run --package processing python -m processing.${PROCESSING_STEP:-bronze}.main"]

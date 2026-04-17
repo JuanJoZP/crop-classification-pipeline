@@ -31,16 +31,10 @@ resource "aws_sagemaker_feature_group" "this" {
 
   offline_store_config {
     s3_storage_config {
-      s3_uri                 = "s3://${var.bucket_name}/feature-store"
-      resolved_output_s3_uri = "s3://${var.bucket_name}/feature-store/${var.feature_group_name}"
+      s3_uri = "s3://${var.bucket_name}/feature-store"
     }
 
-    disable_glue_table_creation = false
-    data_catalog_config {
-      table_name = var.feature_group_name
-      database   = "${var.project_prefix}_feature_store"
-      catalog    = "AwsDataCatalog"
-    }
+    disable_glue_table_creation = true
   }
 
 }

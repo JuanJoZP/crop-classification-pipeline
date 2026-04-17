@@ -1,6 +1,10 @@
-resource "null_resource" "install_dependencies" {
-  triggers = {
-    dependencies_hash = filemd5("${var.source_path}/requirements.txt")
+data "external" "source_hash" {
+  program = ["bash", "-c", "find ${var.source_path} -name '*.py' -o -name 'requirements.txt' | sort | xargs md5sum | md5sum | awk '{print $1}' | jq -R -s '{hash: .}' | tr -d '\\n'"]
+}
+
+resource "terraform_data" "install_dependencies" {
+  triggers_replace = {
+    source_hash = data.external.source_hash.result.hash
   }
 
   provisioner "local-exec" {
@@ -24,7 +28,7 @@ data "archive_file" "lambda_zip" {
   output_path = "${path.module}/${var.function_name}.zip"
   excludes    = ["__pycache__", "*.pyc"]
 
-  depends_on = [null_resource.install_dependencies]
+  depends_on = [terraform_data.install_dependencies]
 }
 
 data "external" "git_commit" {
@@ -39,7 +43,7 @@ resource "aws_lambda_function" "this" {
   timeout       = var.timeout
   memory_size   = var.memory_size
   description   = "Commit: ${data.external.git_commit.result.commit} - ${var.function_description}"
-  publish       = true
+  publish       = false
 
   filename         = data.archive_file.lambda_zip.output_path
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
@@ -51,5 +55,5 @@ resource "aws_lambda_function" "this" {
     }
   }
 
-  depends_on = [null_resource.install_dependencies]
+  depends_on = [terraform_data.install_dependencies]
 }

@@ -29,3 +29,8 @@ resource "aws_iam_role_policy_attachment" "fargate_image_copy_s3_read_polygons" 
   role       = aws_iam_role.fargate_image_copy.name
   policy_arn = aws_iam_policy.s3_read_polygons.arn
 }
+
+resource "aws_iam_role_policy_attachment" "fargate_image_copy_ssm_read_processor" {
+  role       = aws_iam_role.fargate_image_copy.name
+  policy_arn = aws_iam_policy.ssm_read_processor.arn
+}
