@@ -10,6 +10,7 @@ from municipalities import validate_municipalities
 
 S3_BUCKET = os.environ["S3_BUCKET"]
 S3_PREFIX = os.environ.get("S3_PREFIX", "polygons")
+GIT_SHA = os.environ.get("GIT_SHA", "unknown")
 s3_client = boto3.client("s3")
 
 
@@ -83,8 +84,7 @@ def handle(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         "municipios": json.dumps(municipios),
         "periodos": json.dumps(periodos),
         "timestamp": timestamp,
-        "lambda-version": context.function_version,
-        "invoked-arn": context.invoked_function_arn,
+        "git_sha": GIT_SHA,
     }
 
     s3_key = _upload_to_s3(
@@ -102,8 +102,7 @@ def handle(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 "municipios": municipios,
                 "periodos": periodos,
                 "timestamp": timestamp,
-                "lambda-version": context.function_version,
-                "invoked-arn": context.invoked_function_arn,
+                "git_sha": GIT_SHA,
             }
         ),
     }

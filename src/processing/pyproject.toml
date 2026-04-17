@@ -3,7 +3,14 @@ name = "processing"
 version = "0.1.0"
 description = "Data processing for crop classification pipeline"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "boto3",
+    "geopandas",
+    "odc-stac",
+    "pystac-client",
+    "s3fs",
+    "xarray",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["processing"]

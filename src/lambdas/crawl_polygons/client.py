@@ -13,7 +13,7 @@ UPRA_BASE_URL = os.environ.get(
 UPRA_SERVICE_PREFIX = "MonitoreoCultivos"
 MUNICIPALITIES_CACHE_DIR = os.environ.get(
     "MUNICIPALITIES_CACHE_DIR",
-    str(Path(__file__).parent / "municipalities"),
+    "/tmp/municipalities",
 )
 
 CropConfig = Dict[str, Any]
