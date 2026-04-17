@@ -7,6 +7,8 @@ import odc.stac
 import pystac_client
 import s3fs
 import xarray as xr
+from tqdm import tqdm
+
 from processing.bronze.config import load_config
 
 logger = logging.getLogger(__name__)
@@ -112,7 +114,9 @@ def download_polygon(
         bbox=geometry.bounds,
         crs=config["sentinel2_l2a"]["crs"],
         resolution=config["sentinel2_l2a"]["resolution"],
-        dtype=np.dtype(config["sentinel2_l2a"]["dtype"]),
+        dtype=config["sentinel2_l2a"]["dtype"],
+        chunks={},
+        progress=tqdm,
     )
     logger.info("Loaded dataset for %s: %s", pid, dataset)
 
