@@ -83,7 +83,7 @@ def main():
 
     cpu_count = os.cpu_count() or 1
     max_workers = config["workers_per_core"] * cpu_count
-    s3 = s3fs_lib.S3FileSystem(anon=False)
+    s3 = s3fs_lib.S3FileSystem(anon=False, max_connections=max_workers)
 
     logger.info(
         "Starting bronze processing: %d polygons, %d workers",
