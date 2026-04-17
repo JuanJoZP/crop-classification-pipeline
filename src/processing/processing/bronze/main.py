@@ -1,8 +1,11 @@
 import logging
 import os
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
+import psutil
 import s3fs as s3fs_lib
 from processing.bronze.config import get_copernicus_creds, load_config
 from processing.bronze.download import download_polygon
@@ -12,14 +15,39 @@ from processing.bronze.sidecar import build_sidecar, polygon_id
 S3_BUCKET = os.environ["S3_BUCKET"]
 POLYGONS_KEY = os.environ["POLYGONS_KEY"]
 GIT_SHA = os.environ.get("GIT_SHA", "unknown")
+METRICS_INTERVAL = int(os.environ.get("METRICS_INTERVAL", "120"))
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+completed = 0
+completed_lock = threading.Lock()
+
+
+def log_metrics(stop_event: threading.Event, total: int):
+    process = psutil.Process()
+    while not stop_event.is_set():
+        cpu = process.cpu_percent(interval=None)
+        mem = process.memory_info()
+        net_io = psutil.net_io_counters()
+        with completed_lock:
+            done = completed
+        logger.info(
+            "METRICS cpu=%.1f%% mem_rss=%.0fMB net_bytes_sent=%.0fMB net_bytes_recv=%.0fMB progress=%d/%d",
+            cpu,
+            mem.rss / 1024 / 1024,
+            net_io.bytes_sent / 1024 / 1024,
+            net_io.bytes_recv / 1024 / 1024,
+            done,
+            total,
+        )
+        stop_event.wait(METRICS_INTERVAL)
 
 
 def process_polygon(
     row, config: dict, copernicus_creds: dict, s3: s3fs_lib.S3FileSystem
 ):
+    global completed
     pid = polygon_id(row)
     logger.info("Processing polygon %s", pid)
 
@@ -33,6 +61,8 @@ def process_polygon(
     sidecar["processing_metadata"]["zarr_key"] = zarr_key
     upload_sidecar(pid, sidecar)
     logger.info("Polygon %s complete", pid)
+    with completed_lock:
+        completed += 1
 
 
 def main():
@@ -52,16 +82,28 @@ def main():
         max_workers,
     )
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {
-            executor.submit(process_polygon, row, config, copernicus_creds, s3): idx
-            for idx, row in gdf.iterrows()
-        }
-        for future in as_completed(futures):
-            try:
-                future.result()
-            except Exception:
-                logger.exception("Polygon job failed")
+    global completed
+    completed = 0
+    stop_event = threading.Event()
+    metrics_thread = threading.Thread(
+        target=log_metrics, args=(stop_event, len(gdf)), daemon=True
+    )
+    metrics_thread.start()
+
+    try:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(process_polygon, row, config, copernicus_creds, s3): idx
+                for idx, row in gdf.iterrows()
+            }
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception:
+                    logger.exception("Polygon job failed")
+    finally:
+        stop_event.set()
+        metrics_thread.join(timeout=5)
 
     logger.info("Bronze processing complete for %d polygons", len(gdf))
 

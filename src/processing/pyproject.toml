@@ -7,6 +7,7 @@ dependencies = [
     "boto3",
     "geopandas",
     "odc-stac",
+    "psutil",
     "pystac-client",
     "s3fs",
     "xarray",

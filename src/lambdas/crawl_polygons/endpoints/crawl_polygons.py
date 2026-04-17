@@ -14,18 +14,21 @@ GIT_SHA = os.environ.get("GIT_SHA", "unknown")
 s3_client = boto3.client("s3")
 
 
-def _parse_event(event: Dict[str, Any]) -> Tuple[List[str], List[str]]:
+def _parse_event(event: Dict[str, Any]) -> Tuple[List[str], List[str], int]:
     if isinstance(event.get("body"), str):
         body: Dict[str, Any] = json.loads(event["body"])
         municipios: List[str] = body.get("municipios", [])
         periodos: List[str] = body.get("periodos", [])
+        limit: int = body.get("limit", 0)
     elif isinstance(event.get("body"), dict):
         municipios = event.get("municipios") or event["body"].get("municipios", [])
         periodos = event.get("periodos") or event["body"].get("periodos", [])
+        limit = event.get("limit") or event["body"].get("limit", 0)
     else:
         municipios = event.get("municipios", [])
         periodos = event.get("periodos", [])
-    return municipios, periodos
+        limit = event.get("limit", 0)
+    return municipios, periodos, limit
 
 
 def _upload_to_s3(data: bytes, key: str, metadata: Dict[str, str]) -> str:
@@ -40,7 +43,7 @@ def _upload_to_s3(data: bytes, key: str, metadata: Dict[str, str]) -> str:
 
 
 def handle(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    municipios, periodos = _parse_event(event)
+    municipios, periodos, limit = _parse_event(event)
 
     if not municipios or not periodos:
         return {
@@ -73,6 +76,8 @@ def handle(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         }
 
     rows = fetch_polygons(municipios, periodos)
+    if limit and limit > 0:
+        rows = rows[:limit]
     geojson = rows_to_geojson(rows)
 
     now = datetime.now(timezone.utc)
