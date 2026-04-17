@@ -13,4 +13,5 @@ variable "project_prefix" {
 variable "budget_alert_email" {
   description = "Email address for budget alerts"
   type        = string
+  default     = "juanzpjose136@gmail.com"
 }
