@@ -72,7 +72,7 @@ The Lambda is dispatched by `event["action"]` (defaults to `"crawl_polygons"`):
 
 Base URL: `https://geoservicios.upra.gov.co/arcgis/rest/services/MonitoreoCultivos/{service}/MapServer/0/query`
 
-Services follow the pattern `{crop}_{year}_s{semester}` (e.g. `arroz_2021_s1`), defined in `VALID_PERIODS`.
+Services follow the pattern `{crop}_{year}_s{semester}` (e.g. `arroz_2021_s1`), defined in `VALID_PERIODS`. **Important**: the Lambda `periodos` parameter takes **years** (e.g. `"2024"`), not the service names themselves. The Lambda internally maps each year to its corresponding services via `VALID_PERIODS` and queries all of them.
 
 #### Endpoint A — Polygon query (`crawl_polygons` action)
 
