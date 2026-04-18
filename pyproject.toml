@@ -9,9 +9,20 @@ dependencies = []
 [tool.uv.workspace]
 members = ["src/processing", "src/training"]
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+[dependency-groups]
+dev = [
+    "matplotlib",
+    "matplotlib-inline",
+    "xarray",
+    "zarr>=2.18.3",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "matplotlib",
+    "matplotlib-inline",
+    "xarray",
+]
 
 [tool.pylint.messages_control]
 disable = [
