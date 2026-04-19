@@ -120,6 +120,109 @@ Returns ArcGIS JSON `FeatureSet` with `features[].attributes = {municipio, depar
 | `crawl_polygons` | ArcGIS GeoJSON FeatureCollection → flat rows `{...properties, geometry, service, acquisition_date}` → GeoJSON FeatureCollection with extra `service` + `acquisition_date` properties + `count` |
 | `list_municipalities` | ArcGIS JSON FeatureSet `features[].attributes` → deduplicated `{municipio, departamen}` list → `{crop, count, municipalities}` envelope |
 
+## Silver step — noise reduction, cloud masking, time range adjustment
+
+**Input**: `raw/` (zarr store per parcel, downloaded from odc-stac)  
+**Output**: `processed/` (zarr store per parcel)
+
+### Processing stages per parcel
+
+| Stage | Description |
+|---|---|
+| 1. Band rename | `swir16` → `swir1` |
+| 2. veg_index | `(nir - red) / (nir + red + swir1)` |
+| 3. AOI mask | Polygon bounds + `aoi_padding` (meters) |
+| 4. Clear pixels | Cloud mask via SCL classes + `clouds_padding` (meters) |
+| 5. Stack + dropna | Stack lat/lon → pixel dim, drop pixels with no veg_index |
+| 6. Clean (PhenolopyCleaner) | Remove temporal outliers, smooth noise |
+| 7. Season filter (MainSeasonFilter) | Filter time range by crop planting/harvest window |
+| 8. Drop time | Drop timesteps with no valid veg_index |
+| 9. Spectral indexes | NDVI, EVI, SAVI, etc. (config: `indexes`) |
+| 10. Phenometrics | Phenological metrics (if `calc_phenometrics: true`) |
+| 11. Drop vars + transpose | Drop `spatial_ref`, `scl`; transpose to `(pixel, time)` |
+
+### Sidecar metadata
+
+- `processing_silver_metadata`: `{git_sha, timestamp, zarr_key, bronze_key}`
+- Inherits `processing_bronze_metadata` from bronze
+
+### Config (`silver/config.py`)
+
+| Key | Description |
+|---|---|
+| `aoi_padding` | Meters to pad polygon bounds (default: 100) |
+| `clouds_padding` | Meters to buffer cloud masks (default: 300) |
+| `cloud_mask_scl_keep_classes` | SCL classes to keep as clear (default: `[3, 7, 10, 11]`) |
+| `indexes` | List of spectral indexes to compute (default: `["ndvi", "evi", "savi"]`) |
+| `calc_phenometrics` | Whether to compute phenological metrics (default: `false`) |
+
+### Zarr structure
+
+```
+processed/{pid}.zarr/
+├── veg_index     (pixel, time)
+├── ndvi          (pixel, time)
+├── evi           (pixel, time)
+├── ...           (other spectral indexes)
+└── {raw bands}  (pixel, time)
+```
+
+## Gold step — feature enrichment, normalization, label extraction
+
+**Input**: `processed/` (zarr store per parcel)  
+**Output**: `feature-store/` (parquet + metadata JSON)
+
+### Processing stages
+
+| Stage | Description |
+|---|---|
+| 1. Discover parcels | List all parcels in `processed/` |
+| 2. Lineage check | Skip if silver/bronze git SHA unchanged |
+| 3. Compute global scalers | Fit `StandardScaler` or `MinMaxScaler` per variable across all parcels |
+| 4. Normalize per parcel | Apply global scaler to mean time series per parcel |
+| 5. Extract label | Map `cultivo`: `arroz` → 0, `papa` → 1, `maiz` → 2 |
+| 6. Write parquet | One row per parcel with metadata + normalized time series |
+| 7. Write metadata | JSON with git SHA, scalers, normalization method, lineage |
+
+### Output schema (parquet)
+
+| Column | Type | Description |
+|---|---|---|
+| `polygon_id` | string | Parcel ID (from sidecar) |
+| `cultivo` | string | Crop name |
+| `departamen` | string | Department |
+| `municipio` | string | Municipality |
+| `year` | int | Year from service name |
+| `semester` | int | Semester from service name (`s1`=1, `s2`=2) |
+| `label` | int | Integer label (arroz=0, papa=1, maiz=2) |
+| `n_timesteps` | int | Number of time steps after silver |
+| `n_pixels` | int | Number of valid pixels |
+| `{var}_normalized` | list[float] | Normalized mean time series per variable |
+
+### Config (`gold/config.py`)
+
+| Key | Description |
+|---|---|
+| `normalization_method` | `"zscore"` (StandardScaler) or `"minmax"` (MinMaxScaler) |
+
+### S3 outputs
+
+- **Data**: `feature-store/gold_timeseries_{timestamp}.parquet`
+- **Metadata**: `feature-store/gold_timeseries_{timestamp}_metadata.json`
+
+Metadata JSON includes:
+```json
+{
+  "gold_git_sha": "...",
+  "gold_timestamp": "...",
+  "parquet_key": "feature-store/gold_timeseries_...",
+  "n_parcels": N,
+  "linaje": {"bronze_git_sha": "...", "silver_git_sha": "..."},
+  "scalers": {"var": {"mean": ..., "std": ...}},
+  "normalization_method": "zscore"
+}
+```
+
 ## Commands
 
 - `uv sync` — install dependencies and sync virtual environment
