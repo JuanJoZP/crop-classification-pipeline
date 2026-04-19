@@ -27,7 +27,7 @@ def aoi_mask(
     )
 
     if padding > 0:
-        mask = binary_erosion(mask, iterations=padding).astype(mask.dtype)
+        mask = binary_erosion(mask, iterations=int(padding)).astype(mask.dtype)
 
     return xr.DataArray(
         mask,
@@ -58,7 +58,7 @@ def clear_pixels_mask(
         if values[t].all():
             eroded[t] = values[t]
         else:
-            eroded[t] = binary_erosion(values[t], iterations=padding).astype(
+            eroded[t] = binary_erosion(values[t], iterations=int(padding)).astype(
                 masks.dtype
             )
 
