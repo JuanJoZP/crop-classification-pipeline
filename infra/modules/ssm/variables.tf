@@ -57,3 +57,45 @@ variable "bronze_workers" {
   type        = number
   default     = 2
 }
+
+variable "silver_aoi_padding" {
+  description = "Erosion iterations for AOI mask"
+  type        = number
+  default     = 1
+}
+
+variable "silver_clouds_padding" {
+  description = "Erosion iterations for clear pixels mask"
+  type        = number
+  default     = 1
+}
+
+variable "silver_cloud_mask_scl_keep_classes" {
+  description = "SCL classes to keep in clear pixels mask (comma-separated)"
+  type        = list(string)
+  default     = ["4", "5"]
+}
+
+variable "silver_calc_phenometrics" {
+  description = "Whether to calculate phenological variables"
+  type        = bool
+  default     = false
+}
+
+variable "silver_indexes" {
+  description = "Spectral indexes to calculate (comma-separated)"
+  type        = string
+  default     = "ndvi,evi,gndvi,ndmi"
+}
+
+variable "gold_normalization_method" {
+  description = "Normalization method: minmax or zscore"
+  type        = string
+  default     = "minmax"
+}
+
+variable "gold_target_column" {
+  description = "Column name for the crop label"
+  type        = string
+  default     = "cultivo"
+}

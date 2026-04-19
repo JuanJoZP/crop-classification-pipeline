@@ -10,10 +10,18 @@ dependencies = [
     "odc-stac",
     "psutil",
     "pystac-client",
+    "pyarrow",
+    "rasterio",
+    "rioxarray",
     "s3fs",
+    "scipy",
+    "shapely",
     "tqdm",
     "xarray",
     "zarr",
+    "bottleneck",
+    "dask",
+    "matplotlib>=3.10.8",
 ]
 
 [tool.hatch.build.targets.wheel]

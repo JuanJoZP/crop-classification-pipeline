@@ -79,7 +79,8 @@ resource "aws_iam_policy" "s3_write_processed" {
       {
         Effect = "Allow"
         Action = [
-          "s3:PutObject"
+          "s3:PutObject",
+          "s3:DeleteObject"
         ]
         Resource = "${local.bucket_arn}/processed/*"
       },
@@ -361,7 +362,8 @@ resource "aws_iam_policy" "step_functions_run_ecs" {
         ]
         Resource = [
           aws_iam_role.ecs_task_execution.arn,
-          aws_iam_role.fargate_image_copy.arn
+          aws_iam_role.fargate_image_copy.arn,
+          aws_iam_role.silver_fargate_task.arn
         ]
       }
     ]
@@ -390,7 +392,6 @@ resource "aws_iam_policy" "step_functions_run_sagemaker" {
           "iam:PassRole"
         ]
         Resource = [
-          aws_iam_role.sagemaker_processing_silver.arn,
           aws_iam_role.sagemaker_processing_gold.arn
         ]
       }

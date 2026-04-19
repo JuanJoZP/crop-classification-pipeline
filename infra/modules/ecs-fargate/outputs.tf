@@ -18,6 +18,10 @@ output "security_group_id" {
   value = aws_security_group.this.id
 }
 
+output "log_group_name" {
+  value = aws_cloudwatch_log_group.this.name
+}
+
 output "container_name" {
   value = "processing"
 }

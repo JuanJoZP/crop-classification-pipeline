@@ -17,3 +17,7 @@ output "s3_bucket_name" {
 output "github_actions_role_arn" {
   value = module.github_oidc.role_arn
 }
+
+output "silver_task_definition_arn" {
+  value = aws_ecs_task_definition.silver.arn
+}

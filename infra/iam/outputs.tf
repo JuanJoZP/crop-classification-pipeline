@@ -10,12 +10,12 @@ output "fargate_image_copy_role_arn" {
   value = aws_iam_role.fargate_image_copy.arn
 }
 
-output "sagemaker_processing_silver_role_arn" {
-  value = aws_iam_role.sagemaker_processing_silver.arn
+output "silver_fargate_task_role_arn" {
+  value = aws_iam_role.silver_fargate_task.arn
 }
 
-output "sagemaker_processing_silver_role_name" {
-  value = aws_iam_role.sagemaker_processing_silver.name
+output "silver_fargate_task_role_name" {
+  value = aws_iam_role.silver_fargate_task.name
 }
 
 output "sagemaker_processing_gold_role_arn" {

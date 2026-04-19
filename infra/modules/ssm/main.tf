@@ -78,3 +78,56 @@ resource "aws_ssm_parameter" "bronze_workers" {
   type        = "String"
   value       = tostring(var.bronze_workers)
 }
+
+# ── Silver processor config ──
+
+resource "aws_ssm_parameter" "silver_aoi_padding" {
+  name        = "/${var.project_prefix}/silver/aoi_padding"
+  description = "Erosion iterations for AOI mask"
+  type        = "String"
+  value       = tostring(var.silver_aoi_padding)
+}
+
+resource "aws_ssm_parameter" "silver_clouds_padding" {
+  name        = "/${var.project_prefix}/silver/clouds_padding"
+  description = "Erosion iterations for clear pixels mask"
+  type        = "String"
+  value       = tostring(var.silver_clouds_padding)
+}
+
+resource "aws_ssm_parameter" "silver_cloud_mask_scl_keep_classes" {
+  name        = "/${var.project_prefix}/silver/cloud_mask_scl_keep_classes"
+  description = "SCL classes to keep in clear pixels mask (comma-separated)"
+  type        = "String"
+  value       = join(",", var.silver_cloud_mask_scl_keep_classes)
+}
+
+resource "aws_ssm_parameter" "silver_calc_phenometrics" {
+  name        = "/${var.project_prefix}/silver/calc_phenometrics"
+  description = "Whether to calculate phenological variables"
+  type        = "String"
+  value       = tostring(var.silver_calc_phenometrics)
+}
+
+resource "aws_ssm_parameter" "silver_indexes" {
+  name        = "/${var.project_prefix}/silver/indexes"
+  description = "Spectral indexes to calculate (comma-separated)"
+  type        = "String"
+  value       = var.silver_indexes
+}
+
+# ── Gold processor config ──
+
+resource "aws_ssm_parameter" "gold_normalization_method" {
+  name        = "/${var.project_prefix}/gold/normalization_method"
+  description = "Normalization method: minmax or zscore"
+  type        = "String"
+  value       = var.gold_normalization_method
+}
+
+resource "aws_ssm_parameter" "gold_target_column" {
+  name        = "/${var.project_prefix}/gold/target_column"
+  description = "Column name for the crop label"
+  type        = "String"
+  value       = var.gold_target_column
+}
