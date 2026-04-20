@@ -5,8 +5,6 @@ description = "Data processing for crop classification pipeline"
 requires-python = ">=3.10"
 dependencies = [
     "boto3",
-    "pandas",
-    "sagemaker-mlops>=1.0",
     "botocore[crt]>=1.42.89",
     "geopandas",
     "odc-stac",
@@ -25,7 +23,6 @@ dependencies = [
     "bottleneck",
     "dask",
     "matplotlib>=3.10.8",
-    "sagemaker>=3.0.1",
 ]
 
 [tool.hatch.build.targets.wheel]

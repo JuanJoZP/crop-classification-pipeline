@@ -15,7 +15,8 @@ COPY pyproject.toml uv.lock ./
 COPY src/ src/
 
 RUN uv venv && \
-    uv sync --frozen --no-dev --package processing
+    uv sync --frozen --no-dev --package processing && \
+    uv pip install --no-deps sagemaker-mlops
 
 ENV GIT_SHA=${GIT_SHA}
 
