@@ -2,9 +2,9 @@ import json
 import logging
 import os
 import threading
-from typing import Any
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import pandas as pd
+import boto3
 import psutil
 import xarray as xr
 
@@ -53,7 +53,7 @@ _pending_records: list[dict] = []
 _ingested_count: int = 0
 _ingested_lock = threading.Lock()
 _max_workers: int | None = None
-_feature_definitions: dict | None = None
+_fs_client: boto3.client | None = None
 
 
 def get_workers() -> int:
@@ -65,23 +65,12 @@ def get_workers() -> int:
     return _max_workers
 
 
-def _get_feature_definitions() -> dict:
-    global _feature_definitions
-    if _feature_definitions is None:
-        import boto3
-
-        client = boto3.client("sagemaker")
-        response = client.describe_feature_group(FeatureGroupName=FEATURE_GROUP_NAME)
-        _feature_definitions = {
-            fd["FeatureName"]: {"Type": fd["FeatureType"]}
-            for fd in response["FeatureDefinitions"]
-        }
-        logger.info(
-            "Loaded %d feature definitions from Feature Group '%s'",
-            len(_feature_definitions),
-            FEATURE_GROUP_NAME,
-        )
-    return _feature_definitions
+def _get_fs_client() -> boto3.client:
+    global _fs_client
+    if _fs_client is None:
+        _fs_client = boto3.client("sagemaker-featurestore-runtime")
+        logger.info("Created FeatureStore Runtime client")
+    return _fs_client
 
 
 def discover_silver_sidecars(input_dir: str = INPUT_DIR) -> list[str]:
@@ -126,29 +115,40 @@ def _add_ingested(n: int):
         _ingested_count += n
 
 
+def _put_record(record: dict) -> bool:
+    feature_values = [
+        {
+            "FeatureName": k,
+            "ValueAsString": str(v) if not isinstance(v, list) else json.dumps(v),
+        }
+        for k, v in record.items()
+    ]
+    try:
+        _get_fs_client().put_record(
+            FeatureGroupName=FEATURE_GROUP_NAME,
+            Record=feature_values,
+        )
+        return True
+    except Exception as e:
+        logger.error("put_record failed for objectid=%s: %s", record.get("objectid"), e)
+        return False
+
+
 def _ingest_records(records: list[dict]):
     if not records:
         return
 
-    from sagemaker.mlops.feature_store import IngestionError, IngestionManagerPandas
-
     max_workers = get_workers()
-    df = pd.DataFrame(records)
-    feature_defs = _get_feature_definitions()
+    success = 0
 
-    try:
-        manager = IngestionManagerPandas(
-            feature_group_name=FEATURE_GROUP_NAME,
-            feature_definitions=feature_defs,
-            max_workers=max_workers,
-        )
-        manager.run(data_frame=df, wait=True)
-        _add_ingested(len(records))
-        logger.info("Ingested %d records via Feature Store SDK", len(records))
-    except IngestionError as e:
-        logger.error("Ingestion failed for %d rows: %s", len(e.failed_rows), e.message)
-    except Exception as e:
-        logger.error("Ingestion error: %s", e)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(_put_record, r): r for r in records}
+        for future in as_completed(futures):
+            if future.result():
+                success += 1
+
+    _add_ingested(success)
+    logger.info("Ingested %d/%d records via Feature Store", success, len(records))
 
 
 def flush_batch():
@@ -177,6 +177,7 @@ def get_queue_size() -> int:
 
 
 def reset():
-    global _ingested_count, _pending_records
+    global _ingested_count, _pending_records, _fs_client
     _ingested_count = 0
     _pending_records = []
+    _fs_client = None

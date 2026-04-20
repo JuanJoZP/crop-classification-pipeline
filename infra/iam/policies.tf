@@ -398,3 +398,28 @@ resource "aws_iam_policy" "step_functions_run_sagemaker" {
     ]
   })
 }
+
+resource "aws_iam_policy" "ecr_pull" {
+  name        = "${var.project_prefix}-ecr-pull"
+  description = "Allow pulling container images from ECR"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:BatchGetImage",
+          "ecr:GetDownloadUrlForLayer"
+        ]
+        Resource = var.ecr_repository_arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
+        Resource = "*"
+      }
+    ]
+  })
+}

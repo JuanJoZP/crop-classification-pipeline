@@ -43,3 +43,8 @@ resource "aws_iam_role_policy_attachment" "sagemaker_processing_gold_ssm_read" {
   role       = aws_iam_role.sagemaker_processing_gold.name
   policy_arn = aws_iam_policy.ssm_read_processor.arn
 }
+
+resource "aws_iam_role_policy_attachment" "sagemaker_processing_gold_ecr_pull" {
+  role       = aws_iam_role.sagemaker_processing_gold.name
+  policy_arn = aws_iam_policy.ecr_pull.arn
+}

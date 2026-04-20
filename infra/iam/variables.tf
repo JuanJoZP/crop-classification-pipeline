@@ -14,3 +14,8 @@ variable "feature_group_names" {
   type        = list(string)
   default     = ["crop-polygon-features"]
 }
+
+variable "ecr_repository_arn" {
+  description = "ARN of the ECR repository for processing images"
+  type        = string
+}
