@@ -21,3 +21,7 @@ output "github_actions_role_arn" {
 output "silver_task_definition_arn" {
   value = aws_ecs_task_definition.silver.arn
 }
+
+output "state_machine_arn" {
+  value = aws_sfn_state_machine.data_pipeline.arn
+}

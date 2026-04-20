@@ -1,0 +1,228 @@
+{
+  "Comment": "Crop classification data preparation pipeline: polygons -> bronze (Fargate Map) -> silver (Fargate Map) -> gold (SageMaker)",
+  "StartAt": "CrawlPolygons",
+  "States": {
+    "CrawlPolygons": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${lambda_crawl_polygons_arn}",
+        "Payload": {
+          "action": "crawl_polygons",
+          "municipios.$": "$.municipios",
+          "periodos.$": "$.periodos",
+          "batch_size.$": "$.batch_size",
+          "silver_batch_size.$": "$.silver_batch_size"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed"],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Next": "RunBronzeMap"
+    },
+
+    "RunBronzeMap": {
+      "Type": "Map",
+      "ItemsPath": "$.Payload.bronze_batches",
+      "MaxConcurrency": 10,
+      "ResultPath": "$.bronze_results",
+      "Iterator": {
+        "StartAt": "RunBronzeTask",
+        "States": {
+          "RunBronzeTask": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::ecs:runTask.sync",
+            "Parameters": {
+              "Cluster": "${ecs_cluster_arn}",
+              "TaskDefinition": "${bronze_task_family}",
+              "CapacityProviderStrategy": [
+                {
+                  "CapacityProvider": "FARGATE_SPOT",
+                  "Weight": 1,
+                  "Base": 1
+                }
+              ],
+              "PlatformVersion": "1.4.0",
+              "NetworkConfiguration": {
+                "AwsvpcConfiguration": {
+                  "Subnets": ${subnet_ids_json},
+                  "SecurityGroups": ["${security_group_id}"],
+                  "AssignPublicIp": "ENABLED"
+                }
+              },
+              "Overrides": {
+                "ContainerOverrides": [
+                  {
+                    "Name": "processing",
+                    "Environment": [
+                      { "Name": "S3_BUCKET", "Value": "${s3_bucket}" },
+                      { "Name": "PROCESSING_STEP", "Value": "bronze" },
+                      { "Name": "POLYGONS_KEY", "Value.$": "$.polygons_key" },
+                      { "Name": "OFFSET", "Value.$": "$.offset" },
+                      { "Name": "LIMIT", "Value.$": "$.limit" },
+                      { "Name": "GIT_SHA", "Value": "${git_sha}" }
+                    ]
+                  }
+                ]
+              }
+            },
+            "Retry": [
+              {
+                "ErrorEquals": ["States.TaskFailed"],
+                "IntervalSeconds": 30,
+                "MaxAttempts": 2,
+                "BackoffRate": 2.0
+              }
+            ],
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "ResultPath": "$.error",
+                "Next": "BronzeTaskFailed"
+              }
+            ],
+            "End": true
+          },
+          "BronzeTaskFailed": {
+            "Type": "Pass",
+            "Result": { "status": "failed" },
+            "End": true
+          }
+        }
+      },
+      "Next": "RunSilverMap"
+    },
+
+    "RunSilverMap": {
+      "Type": "Map",
+      "ItemsPath": "$.Payload.silver_batches",
+      "MaxConcurrency": 10,
+      "ResultPath": "$.silver_results",
+      "Iterator": {
+        "StartAt": "RunSilverTask",
+        "States": {
+          "RunSilverTask": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::ecs:runTask.sync",
+            "Parameters": {
+              "Cluster": "${ecs_cluster_arn}",
+              "TaskDefinition": "${silver_task_family}",
+              "CapacityProviderStrategy": [
+                {
+                  "CapacityProvider": "FARGATE_SPOT",
+                  "Weight": 1,
+                  "Base": 1
+                }
+              ],
+              "PlatformVersion": "1.4.0",
+              "NetworkConfiguration": {
+                "AwsvpcConfiguration": {
+                  "Subnets": ${subnet_ids_json},
+                  "SecurityGroups": ["${security_group_id}"],
+                  "AssignPublicIp": "ENABLED"
+                }
+              },
+              "Overrides": {
+                "ContainerOverrides": [
+                  {
+                    "Name": "processing",
+                    "Environment": [
+                      { "Name": "S3_BUCKET", "Value": "${s3_bucket}" },
+                      { "Name": "PROCESSING_STEP", "Value": "silver" },
+                      { "Name": "OFFSET", "Value.$": "$.offset" },
+                      { "Name": "LIMIT", "Value.$": "$.limit" },
+                      { "Name": "GIT_SHA", "Value": "${git_sha}" }
+                    ]
+                  }
+                ]
+              }
+            },
+            "Retry": [
+              {
+                "ErrorEquals": ["States.TaskFailed"],
+                "IntervalSeconds": 30,
+                "MaxAttempts": 2,
+                "BackoffRate": 2.0
+              }
+            ],
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "ResultPath": "$.error",
+                "Next": "SilverTaskFailed"
+              }
+            ],
+            "End": true
+          },
+          "SilverTaskFailed": {
+            "Type": "Pass",
+            "Result": { "status": "failed" },
+            "End": true
+          }
+        }
+      },
+      "Next": "RunGoldProcessing"
+    },
+
+    "RunGoldProcessing": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sagemaker:createProcessingJob.sync",
+      "Parameters": {
+        "ProcessingJobName.$": "States.Format('crop-gold-{}', $$$$.Execution.Name)",
+        "ProcessingInputs": [
+          {
+            "InputName": "processed",
+            "S3Input": {
+              "S3Uri": "s3://${s3_bucket}/processed/",
+              "LocalPath": "/opt/ml/processing/processed",
+              "S3DataType": "S3Prefix",
+              "S3InputMode": "File"
+            }
+          }
+        ],
+        "ProcessingOutputConfig": {
+          "Outputs": [
+            {
+              "OutputName": "feature_store",
+              "S3Output": {
+                "S3Uri": "s3://${s3_bucket}/feature-store/",
+                "LocalPath": "/opt/ml/processing/output"
+              }
+            }
+          ]
+        },
+        "ProcessingResources": {
+          "ClusterConfig": {
+            "InstanceType": "${gold_instance_type}",
+            "InstanceCount": ${gold_instance_count},
+            "VolumeSizeInGB": ${gold_volume_size}
+          }
+        },
+        "AppSpecification": {
+          "ImageUri": "${ecr_image_uri}",
+          "ContainerArguments": ["gold"]
+        },
+        "RoleArn": "${sagemaker_gold_role_arn}",
+        "Environment": {
+          "S3_BUCKET": "${s3_bucket}",
+          "PROCESSING_STEP": "gold",
+          "FEATURE_GROUP_NAME": "${feature_group_name}"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed"],
+          "IntervalSeconds": 60,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "End": true
+    }
+  }
+}
