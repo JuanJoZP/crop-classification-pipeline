@@ -131,3 +131,10 @@ resource "aws_ssm_parameter" "gold_target_column" {
   type        = "String"
   value       = var.gold_target_column
 }
+
+resource "aws_ssm_parameter" "gold_workers" {
+  name        = "/${var.project_prefix}/gold/workers"
+  description = "Number of ThreadPoolExecutor workers for gold processing"
+  type        = "String"
+  value       = tostring(var.gold_workers)
+}

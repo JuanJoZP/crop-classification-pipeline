@@ -99,3 +99,9 @@ variable "gold_target_column" {
   type        = string
   default     = "cultivo"
 }
+
+variable "gold_workers" {
+  description = "Number of ThreadPoolExecutor workers for gold processing"
+  type        = number
+  default     = 10
+}
