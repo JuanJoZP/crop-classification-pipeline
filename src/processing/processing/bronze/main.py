@@ -9,7 +9,7 @@ import psutil
 import s3fs as s3fs_lib
 from processing.bronze.config import get_copernicus_creds, load_config
 from processing.bronze.download import download_polygon
-from processing.bronze.io import load_polygons, upload_sidecar
+from processing.bronze.io import load_polygons, load_sidecar, should_process, upload_sidecar
 from processing.bronze.sidecar import build_sidecar, polygon_id
 
 S3_BUCKET = os.environ["S3_BUCKET"]
@@ -23,6 +23,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 completed = 0
+skipped = 0
 completed_lock = threading.Lock()
 job_stats_lock = threading.Lock()
 total_volume = 0
@@ -49,9 +50,16 @@ def log_metrics(stop_event: threading.Event, total: int):
 
 
 def process_polygon(row, config: dict, copernicus_creds: dict):
-    global completed
+    global completed, skipped
     pid = polygon_id(row)
     logger.info("Processing polygon %s", pid)
+
+    sidecar = load_sidecar(pid)
+    if not should_process(sidecar, GIT_SHA):
+        logger.info("Polygon %s already up-to-date, skipping", pid)
+        with completed_lock:
+            skipped += 1
+        return
 
     s3 = s3fs_lib.S3FileSystem(anon=False)
     zarr_key, volume = download_polygon(pid, row, config, copernicus_creds, s3)
@@ -93,6 +101,8 @@ def main():
 
     global completed
     completed = 0
+    global skipped
+    skipped = 0
     global total_volume
     total_volume = 0
     wall_start = time.monotonic()
@@ -119,24 +129,22 @@ def main():
 
     wall_elapsed = time.monotonic() - wall_start
     n_ok = completed
+    n_skipped = skipped
+    logger.info(
+        "SUMMARY workers=%d jobs_ok=%d skipped=%d/%d wall_time=%.1fs",
+        max_workers,
+        n_ok,
+        n_skipped,
+        len(gdf),
+        wall_elapsed,
+    )
     if n_ok > 0:
         avg_time = wall_elapsed / n_ok
         avg_volume = total_volume / n_ok
         logger.info(
-            "SUMMARY workers=%d jobs_ok=%d/%d wall_time=%.1fs avg_time=%.1fs/job avg_volume=%.0fpx",
-            max_workers,
-            n_ok,
-            len(gdf),
-            wall_elapsed,
+            "DETAIL avg_time=%.1fs/job avg_volume=%.0fpx",
             avg_time,
             avg_volume,
-        )
-    else:
-        logger.info(
-            "SUMMARY workers=%d jobs_ok=0/%d wall_time=%.1fs avg_volume=0px",
-            max_workers,
-            len(gdf),
-            wall_elapsed,
         )
 
     logger.info("Bronze processing complete for %d polygons", len(gdf))

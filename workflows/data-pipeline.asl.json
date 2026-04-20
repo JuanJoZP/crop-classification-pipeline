@@ -166,14 +166,23 @@
           }
         }
       },
-      "Next": "RunGoldProcessing"
+      "Next": "PrepareGoldJobName"
+    },
+
+    "PrepareGoldJobName": {
+      "Type": "Pass",
+      "Result": {
+        "gold_job_prefix": "crop-gold-"
+      },
+      "ResultPath": "$.gold_job",
+"Next": "RunGoldProcessing"
     },
 
     "RunGoldProcessing": {
       "Type": "Task",
       "Resource": "arn:aws:states:::sagemaker:createProcessingJob.sync",
       "Parameters": {
-        "ProcessingJobName.$": "States.Format('crop-gold-{}', $$$$.Execution.Name)",
+        "ProcessingJobName.$": "$.Payload.gold_job_name",
         "ProcessingInputs": [
           {
             "InputName": "processed",
@@ -191,7 +200,8 @@
               "OutputName": "feature_store",
               "S3Output": {
                 "S3Uri": "s3://${s3_bucket}/feature-store/",
-                "LocalPath": "/opt/ml/processing/output"
+                "LocalPath": "/opt/ml/processing/output",
+                "S3UploadMode": "EndOfJob"
               }
             }
           ]
@@ -204,8 +214,7 @@
           }
         },
         "AppSpecification": {
-          "ImageUri": "${ecr_image_uri}",
-          "ContainerArguments": ["gold"]
+          "ImageUri": "${ecr_image_uri}"
         },
         "RoleArn": "${sagemaker_gold_role_arn}",
         "Environment": {

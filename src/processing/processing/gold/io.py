@@ -13,7 +13,7 @@ import xarray as xr
 
 logger = logging.getLogger(__name__)
 
-INPUT_DIR = "/opt/ml/processing/input"
+INPUT_DIR = os.environ.get("GOLD_INPUT_DIR", "/opt/ml/processing/processed")
 FEATURE_GROUP_NAME = "crop-polygon-features"
 
 LIST_BANDS = [

@@ -75,6 +75,9 @@ def write_zarr(pid: str, dataset: xr.Dataset, s3: s3fs.S3FileSystem):
     zarr_path = f"s3://{s3_bucket}/{raw_prefix}/{pid}.zarr"
 
     logger.info("Writing zarr for %s to %s", pid, zarr_path)
+    if s3.exists(zarr_path):
+        logger.info("Removing existing zarr at %s", zarr_path)
+        s3.rm(zarr_path, recursive=True)
     store = s3fs.S3Map(root=zarr_path, s3=s3, check=False)
     dataset.to_zarr(store, consolidated=True)
     logger.info("Written zarr for %s", pid)

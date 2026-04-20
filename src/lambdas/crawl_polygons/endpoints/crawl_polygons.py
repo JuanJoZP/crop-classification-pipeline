@@ -44,7 +44,7 @@ def _compute_batches(total: int, batch_size: int, s3_key: str, include_key: bool
     for offset in range(0, total, batch_size):
         remaining = total - offset
         size = min(batch_size, remaining)
-        batch: Dict[str, Any] = {"offset": offset, "limit": size}
+        batch: Dict[str, Any] = {"offset": str(offset), "limit": str(size)}
         if include_key:
             batch["polygons_key"] = s3_key
         batches.append(batch)
@@ -108,6 +108,7 @@ def handle(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     total_polygons = geojson["count"]
     bronze_batches = _compute_batches(total_polygons, batch_size, s3_key, include_key=True)
     silver_batches = _compute_batches(total_polygons, silver_batch_size, s3_key, include_key=False)
+    gold_job_name = f"crop-gold-{timestamp}".lower()
 
     return {
         "s3_key": s3_key,
@@ -118,4 +119,5 @@ def handle(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         "git_sha": GIT_SHA,
         "bronze_batches": bronze_batches,
         "silver_batches": silver_batches,
+        "gold_job_name": gold_job_name,
     }

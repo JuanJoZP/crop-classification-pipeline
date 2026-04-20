@@ -1,11 +1,6 @@
-resource "aws_cloudwatch_log_group" "step_functions" {
-  name              = "/aws/states/${var.project_prefix}-data-pipeline"
-  retention_in_days = 7
-}
-
-resource "aws_iam_policy" "step_functions_cloudwatch" {
-  name        = "${var.project_prefix}-step-functions-cloudwatch"
-  description = "Allow Step Functions to write logs to CloudWatch"
+resource "aws_iam_policy" "step_functions_logging" {
+  name        = "${var.project_prefix}-step-functions-logging"
+  description = "Allow Step Functions to manage CloudWatch Logs, EventBridge rules, and service-linked roles"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -13,6 +8,9 @@ resource "aws_iam_policy" "step_functions_cloudwatch" {
       {
         Effect = "Allow"
         Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
           "logs:CreateLogDelivery",
           "logs:GetLogDelivery",
           "logs:UpdateLogDelivery",
@@ -23,14 +21,30 @@ resource "aws_iam_policy" "step_functions_cloudwatch" {
           "logs:DescribeLogGroups"
         ]
         Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "events:PutTargets",
+          "events:PutRule",
+          "events:DescribeRule"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "iam:CreateServiceLinkedRole"
+        ]
+        Resource = "arn:aws:iam::*:role/aws-service-role/states.amazonaws.com/AWSServiceRoleForStates"
       }
     ]
   })
 }
 
-resource "aws_iam_role_policy_attachment" "step_functions_cloudwatch" {
+resource "aws_iam_role_policy_attachment" "step_functions_logging" {
   role       = module.iam.step_functions_role_name
-  policy_arn = aws_iam_policy.step_functions_cloudwatch.arn
+  policy_arn = aws_iam_policy.step_functions_logging.arn
 }
 
 resource "aws_sfn_state_machine" "data_pipeline" {
@@ -54,13 +68,14 @@ resource "aws_sfn_state_machine" "data_pipeline" {
       gold_instance_type         = local.sagemaker_processing.gold.instance_type
       gold_instance_count        = local.sagemaker_processing.gold.instance_count
       gold_volume_size           = local.sagemaker_processing.gold.volume_size_in_gb
+      gold_job_name               = "${var.project_prefix}-gold-processing"
       feature_group_name          = module.feature_store.feature_group_name
     }
   )
 
   logging_configuration {
-    level                  = "ERROR"
-    include_execution_data = true
-    log_destination        = "${aws_cloudwatch_log_group.step_functions.arn}:*"
+    level = "OFF"
   }
+
+  depends_on = [aws_iam_role_policy_attachment.step_functions_logging]
 }

@@ -23,6 +23,29 @@ def load_polygons(key: str) -> gpd.GeoDataFrame:
     return gdf
 
 
+def load_sidecar(pid: str) -> dict | None:
+    key = f"{RAW_PREFIX}/{pid}_metadata.json"
+    try:
+        response = s3_client.get_object(Bucket=S3_BUCKET, Key=key)
+        body = response["Body"].read().decode("utf-8")
+        return json.loads(body)
+    except s3_client.exceptions.NoSuchKey:
+        return None
+    except s3_client.exceptions.ClientError:
+        return None
+
+
+def should_process(sidecar: dict | None, git_sha: str) -> bool:
+    if sidecar is None:
+        return True
+    existing_sha = sidecar.get("processing_bronze_metadata", {}).get("git_sha")
+    if existing_sha != git_sha:
+        logger.info("Sidecar git_sha=%s differs from current=%s, reprocessing", existing_sha, git_sha)
+        return True
+    logger.info("Sidecar git_sha matches current=%s, skipping", git_sha)
+    return False
+
+
 def upload_sidecar(pid: str, sidecar: dict) -> str:
     key = f"{RAW_PREFIX}/{pid}_metadata.json"
     body = json.dumps(sidecar, ensure_ascii=False, indent=2).encode("utf-8")

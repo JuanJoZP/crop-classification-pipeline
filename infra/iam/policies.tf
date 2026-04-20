@@ -382,7 +382,8 @@ resource "aws_iam_policy" "step_functions_run_sagemaker" {
         Action = [
           "sagemaker:CreateProcessingJob",
           "sagemaker:DescribeProcessingJob",
-          "sagemaker:StopProcessingJob"
+          "sagemaker:StopProcessingJob",
+          "sagemaker:AddTags"
         ]
         Resource = "*"
       },
