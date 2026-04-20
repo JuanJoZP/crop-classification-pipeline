@@ -1,82 +1,103 @@
-import json
 import logging
 import os
-import tempfile
-from datetime import datetime, timezone
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from processing.gold import io, preprocessor
-from processing.gold.config import load_config
-
-S3_BUCKET = os.environ["S3_BUCKET"]
-PROCESSED_PREFIX = os.environ.get("PROCESSED_PREFIX", "processed")
-OUTPUT_PREFIX = os.environ.get("OUTPUT_PREFIX", "feature-store")
+from processing.gold import io, stats
+from processing.gold.preprocessor import process_single
 
 logger = logging.getLogger(__name__)
 
 
+def run() -> tuple[int, int]:
+    logger.info("Gold processing starting")
+
+    sidecar_paths = io.discover_silver_sidecars()
+    total = len(sidecar_paths)
+
+    if total == 0:
+        logger.warning("No silver sidecars found, exiting")
+        return 0, 0
+
+    io.reset()
+    stats.reset()
+
+    wall_start = time.monotonic()
+    stop_event = threading.Event()
+    metrics_thread = threading.Thread(
+        target=stats.log_metrics, args=(stop_event, total), daemon=True
+    )
+    metrics_thread.start()
+
+    try:
+        from tqdm import tqdm
+
+        has_tqdm = True
+    except ImportError:
+        has_tqdm = False
+        logger.warning("tqdm not installed, progress bar disabled")
+
+    success_count = 0
+    error_count = 0
+    max_workers = io.get_workers()
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(process_single, path): idx for idx, path in enumerate(sidecar_paths)
+        }
+
+        if has_tqdm:
+            pbar = tqdm(total=total, desc="Gold processing", unit="parcel")
+        else:
+            pbar = None
+
+        for future in as_completed(futures):
+            result = future.result()
+            if result and result.get("status") == "ok":
+                io.add_to_batch(result["record"])
+                success_count += 1
+            else:
+                error_count += 1
+                logger.error("Failed: %s", result.get("error", "unknown"))
+
+            stats.increment_completed()
+
+            if pbar:
+                pbar.update(1)
+                pbar.set_postfix(
+                    ingested=io.get_ingested_count(),
+                    queued=io.get_queue_size(),
+                )
+
+        if pbar:
+            pbar.close()
+
+    stop_event.set()
+    metrics_thread.join(timeout=5)
+    io.flush_batch()
+
+    wall_elapsed = time.monotonic() - wall_start
+    logger.info(
+        "SUMMARY workers=%d success=%d error=%d wall_time=%.1fs rate=%.1f parcels/s",
+        max_workers,
+        success_count,
+        error_count,
+        wall_elapsed,
+        success_count / wall_elapsed if wall_elapsed > 0 else 0,
+    )
+
+    return success_count, error_count
+
+
 def main():
-    cfg = load_config()
-    method = cfg.get("normalization_method", "zscore")
-    git_sha = os.environ.get("GIT_SHA", "unknown")
-
-    io.init(S3_BUCKET, OUTPUT_PREFIX)
-
-    silver_keys = io.discover_silver_parcels(PROCESSED_PREFIX)
-    exclude = ["spatial_ref", "scl"]
-
-    gold_metadata = io.load_gold_metadata()
-    if gold_metadata and not preprocessor.check_linaje(
-        io.load_silver_sidecar(silver_keys[0]), gold_metadata, git_sha
-    ):
-        logger.info("No linaje changes detected, skipping gold processing")
-        return
-
-    scalers = preprocessor.compute_global_scalers(
-        silver_keys, S3_BUCKET, PROCESSED_PREFIX, exclude, method
-    )
-    fitted_scalers = scalers
-
-    records = preprocessor.process_parcels(
-        silver_keys, S3_BUCKET, PROCESSED_PREFIX, fitted_scalers, exclude
-    )
-
-    batch_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-    base_name = f"gold_timeseries_{batch_id}"
-    parquet_key = f"{OUTPUT_PREFIX}/{base_name}.parquet"
-
-    silver_sample = io.load_silver_sidecar(silver_keys[0])
-    silver_sha = silver_sample.get("processing_silver_metadata", {}).get("git_sha", "")
-    bronze_sha = silver_sample.get("processing_bronze_metadata", {}).get("git_sha", "")
-
-    metadata = {
-        "gold_git_sha": git_sha,
-        "gold_timestamp": datetime.now(timezone.utc).isoformat(),
-        "parquet_key": parquet_key,
-        "n_parcels": len(records),
-        "linaje": {
-            "bronze_git_sha": bronze_sha,
-            "silver_git_sha": silver_sha,
-        },
-        "scalers": {
-            var: preprocessor.serialize_scaler(fitted_scalers[var], method)
-            for var in fitted_scalers
-        },
-        "normalization_method": method,
-    }
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        local_parquet = os.path.join(tmpdir, f"{base_name}.parquet")
-        preprocessor.write_parquet(records, local_parquet)
-        io.upload_file(local_parquet, parquet_key)
-
-        local_meta = os.path.join(tmpdir, f"{base_name}_metadata.json")
-        with open(local_meta, "w") as f:
-            json.dump(metadata, f, indent=2)
-        io.upload_file(local_meta, f"{OUTPUT_PREFIX}/{base_name}_metadata.json")
-
-    logger.info("Gold complete: %d parcels, parquet=%s", len(records), parquet_key)
+    success, error = run()
+    logger.info("Gold complete: %d success, %d errors", success, error)
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(threadName)s %(message)s",
+    )
     main()

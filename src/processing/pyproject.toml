@@ -5,6 +5,8 @@ description = "Data processing for crop classification pipeline"
 requires-python = ">=3.10"
 dependencies = [
     "boto3",
+    "pandas",
+    "sagemaker-mlops>=1.0",
     "botocore[crt]>=1.42.89",
     "geopandas",
     "odc-stac",
