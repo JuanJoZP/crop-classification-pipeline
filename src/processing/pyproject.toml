@@ -25,6 +25,7 @@ dependencies = [
     "bottleneck",
     "dask",
     "matplotlib>=3.10.8",
+    "sagemaker>=3.0.1",
 ]
 
 [tool.hatch.build.targets.wheel]

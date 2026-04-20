@@ -3435,6 +3435,7 @@ dependencies = [
     { name = "rioxarray", version = "0.19.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "rioxarray", version = "0.22.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "s3fs" },
+    { name = "sagemaker" },
     { name = "sagemaker-mlops" },
     { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scikit-learn", version = "1.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -3464,6 +3465,7 @@ requires-dist = [
     { name = "rasterio" },
     { name = "rioxarray" },
     { name = "s3fs" },
+    { name = "sagemaker", specifier = ">=3.0.1" },
     { name = "sagemaker-mlops", specifier = ">=1.0" },
     { name = "scikit-learn" },
     { name = "scipy" },
@@ -4742,6 +4744,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/05/04/74127fc843314818edfa81b5540e26dd537353b123a4edc563109d8f17dd/s3transfer-0.16.0.tar.gz", hash = "sha256:8e990f13268025792229cd52fa10cb7163744bf56e719e0b9cb925ab79abf920", size = 153827, upload-time = "2025-12-01T02:30:59.114Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/fc/51/727abb13f44c1fcf6d145979e1535a35794db0f6e450a0cb46aa24732fe2/s3transfer-0.16.0-py3-none-any.whl", hash = "sha256:18e25d66fed509e3868dc1572b3f427ff947dd2c56f844a5bf09481ad3f3b2fe", size = 86830, upload-time = "2025-12-01T02:30:57.729Z" },
+]
+
+[[package]]
+name = "sagemaker"
+version = "3.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "sagemaker-core" },
+    { name = "sagemaker-mlops" },
+    { name = "sagemaker-serve" },
+    { name = "sagemaker-train" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ca/4e/3ccc3ea9b72ffa1ee6331b0eb204f09cee952cc8bfd5875df257c2a2d1c0/sagemaker-3.0.1.tar.gz", hash = "sha256:b06c5e8de8db1c8e0e294a4700244b6c0ea95196b81be52e53dd044c7be1ecd2", size = 10139, upload-time = "2025-11-20T21:56:15.792Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/de/e0/3dbfa18e1669afcf78cc7517722211ad51e169bf2203e30b4bdb4541c680/sagemaker-3.0.1-py3-none-any.whl", hash = "sha256:478bf2fc1bd27ad6d7da63400d97a028ed657f5a7773cf2c409b933d08a9379e", size = 9488, upload-time = "2025-11-20T21:56:14.665Z" },
 ]
 
 [[package]]
