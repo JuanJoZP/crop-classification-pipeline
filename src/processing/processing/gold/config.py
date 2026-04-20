@@ -16,16 +16,18 @@ def _get_ssm_client():
     return _ssm_client
 
 
-def _get_param(name: str, decrypt: bool = False) -> str:
+def _get_param(name: str, default: str = "") -> str:
     ssm = _get_ssm_client()
-    return ssm.get_parameter(Name=f"{SSM_PREFIX}/{name}", WithDecryption=decrypt)[
-        "Parameter"
-    ]["Value"]
+    try:
+        return ssm.get_parameter(Name=f"{SSM_PREFIX}/{name}", WithDecryption=False)[
+            "Parameter"
+        ]["Value"]
+    except ssm.exceptions.ParameterNotFound:
+        return default
 
 
 def load_config() -> dict:
     logger.info("Fetching gold config from SSM")
     return {
-        "normalization_method": _get_param("gold/normalization_method"),
-        "target_column": _get_param("gold/target_column"),
+        "workers": int(_get_param("gold/workers", "10")),
     }
