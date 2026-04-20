@@ -1,9 +1,12 @@
 import json
+import os
 from datetime import datetime, timezone
 
 import xarray as xr
 
 from processing.gold import io
+
+GIT_SHA = os.environ.get("GIT_SHA", "unknown")
 
 
 def build_record(sidecar: dict, dataset: xr.Dataset) -> dict:
@@ -14,6 +17,7 @@ def build_record(sidecar: dict, dataset: xr.Dataset) -> dict:
         "git_sha": sidecar.get("processing_silver_metadata", {}).get("git_sha", ""),
         "timestamp": sidecar.get("processing_silver_metadata", {}).get("timestamp", ""),
         "bronze_git_sha": sidecar.get("processing_bronze_metadata", {}).get("git_sha", ""),
+        "gold_git_sha": GIT_SHA,
     }
 
     cultivo = props.get("cultivo", "")
@@ -61,11 +65,15 @@ def process_single(sidecar_path: str) -> dict:
     try:
         sidecar = io.load_silver_sidecar(sidecar_path)
         props = sidecar.get("properties", {})
+        objectid = str(props.get("objectid", ""))
         zarr_key = sidecar.get("processing_silver_metadata", {}).get("zarr_key", "")
         if zarr_key:
             pid = zarr_key.replace("processed/", "").replace(".zarr", "")
         else:
             pid = f"{props.get('service', 'unknown')}_{props.get('objectid', 'unknown')}"
+
+        if objectid and not io.check_lineage(objectid, GIT_SHA):
+            return {"status": "skipped", "objectid": objectid, "pid": pid}
 
         dataset = io.load_silver_zarr(pid)
         record = build_record(sidecar, dataset)

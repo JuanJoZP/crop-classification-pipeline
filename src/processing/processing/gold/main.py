@@ -40,6 +40,7 @@ def run() -> tuple[int, int]:
 
     success_count = 0
     error_count = 0
+    skip_count = 0
     max_workers = io.get_workers()
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -54,9 +55,13 @@ def run() -> tuple[int, int]:
 
         for future in as_completed(futures):
             result = future.result()
-            if result and result.get("status") == "ok":
+            status = result.get("status") if result else "error"
+
+            if status == "ok":
                 io.add_to_batch(result["record"])
                 success_count += 1
+            elif status == "skipped":
+                skip_count += 1
             else:
                 error_count += 1
                 logger.error("Failed: %s", result.get("error", "unknown"))
@@ -79,9 +84,10 @@ def run() -> tuple[int, int]:
 
     wall_elapsed = time.monotonic() - wall_start
     logger.info(
-        "SUMMARY workers=%d success=%d error=%d wall_time=%.1fs rate=%.1f parcels/s",
+        "SUMMARY workers=%d success=%d skipped=%d error=%d wall_time=%.1fs rate=%.1f parcels/s",
         max_workers,
         success_count,
+        skip_count,
         error_count,
         wall_elapsed,
         success_count / wall_elapsed if wall_elapsed > 0 else 0,

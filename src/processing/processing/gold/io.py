@@ -179,6 +179,46 @@ def get_queue_size() -> int:
     return len(_pending_records)
 
 
+def check_lineage(objectid: str, current_gold_sha: str) -> bool:
+    try:
+        response = _get_fs_client().get_record(
+            FeatureGroupName=FEATURE_GROUP_NAME,
+            RecordIdentifierValueAsString=objectid,
+        )
+    except Exception as e:
+        logger.warning("get_record failed for objectid=%s: %s, will process", objectid, e)
+        return True
+
+    record = response.get("Record")
+    if not record:
+        logger.info("objectid=%s not in Feature Store, will process", objectid)
+        return True
+
+    metadata_str = ""
+    for feature in record:
+        if feature["FeatureName"] == "metadata":
+            metadata_str = feature["ValueAsString"]
+            break
+
+    if not metadata_str:
+        logger.info("objectid=%s has no metadata, will process", objectid)
+        return True
+
+    try:
+        metadata = json.loads(metadata_str)
+    except json.JSONDecodeError:
+        logger.warning("objectid=%s metadata not valid JSON, will process", objectid)
+        return True
+
+    stored_sha = metadata.get("gold_git_sha", "")
+    if stored_sha == current_gold_sha:
+        logger.info("objectid=%s already processed with SHA %s, skipping", objectid, current_gold_sha)
+        return False
+
+    logger.info("objectid=%s SHA mismatch (stored=%s current=%s), will reprocess", objectid, stored_sha, current_gold_sha)
+    return True
+
+
 def reset():
     global _ingested_count, _pending_records, _fs_client
     _ingested_count = 0
