@@ -61,7 +61,7 @@ def _parse_semester(intervalo: str) -> int:
     return 1
 
 
-def process_single(sidecar_path: str) -> dict:
+def process_single(sidecar_path: str, lineage_cache: dict[str, bool] | None = None) -> dict:
     try:
         sidecar = io.load_silver_sidecar(sidecar_path)
         props = sidecar.get("properties", {})
@@ -72,7 +72,7 @@ def process_single(sidecar_path: str) -> dict:
         else:
             pid = f"{props.get('service', 'unknown')}_{props.get('objectid', 'unknown')}"
 
-        if objectid and not io.check_lineage(objectid, GIT_SHA):
+        if lineage_cache is not None and objectid and lineage_cache.get(objectid, False):
             return {"status": "skipped", "objectid": objectid, "pid": pid}
 
         dataset = io.load_silver_zarr(pid)

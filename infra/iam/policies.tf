@@ -400,6 +400,48 @@ resource "aws_iam_policy" "step_functions_run_sagemaker" {
   })
 }
 
+resource "aws_iam_policy" "sagemaker_gold_athena" {
+  name        = "${var.project_prefix}-sagemaker-gold-athena"
+  description = "Allow SageMaker Gold processing to query Athena for lineage checks"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "athena:StartQueryExecution",
+          "athena:GetQueryExecution",
+          "athena:GetQueryResults",
+          "athena:StopQueryExecution"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "glue:GetTable",
+          "glue:GetTableVersions",
+          "glue:GetPartitions",
+          "glue:GetDatabase"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          local.bucket_arn,
+          "${local.bucket_arn}/*"
+        ]
+      }
+    ]
+  })
+}
+
 resource "aws_iam_policy" "ecr_pull" {
   name        = "${var.project_prefix}-ecr-pull"
   description = "Allow pulling container images from ECR"

@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
@@ -14,7 +15,7 @@ import xarray as xr
 logger = logging.getLogger(__name__)
 
 INPUT_DIR = os.environ.get("GOLD_INPUT_DIR", "/opt/ml/processing/processed")
-FEATURE_GROUP_NAME = "crop-polygon-features"
+FEATURE_GROUP_NAME = os.environ.get("FEATURE_GROUP_NAME", "crop-polygon-features")
 
 LIST_BANDS = [
     "coastal",
@@ -84,7 +85,7 @@ def _get_fs_client() -> boto3.client:
 def discover_silver_sidecars(input_dir: str = INPUT_DIR) -> list[str]:
     from pathlib import Path
 
-    sidecar_files = list(Path(input_dir).rglob("*_metadata.json"))
+    sidecar_files = sorted(Path(input_dir).rglob("*_metadata.json"))
     logger.info("Found %d silver sidecars", len(sidecar_files))
     return [str(f) for f in sidecar_files]
 
@@ -184,44 +185,51 @@ def get_queue_size() -> int:
     return len(_pending_records)
 
 
-def check_lineage(objectid: str, current_gold_sha: str) -> bool:
-    try:
-        response = _get_fs_client().get_record(
-            FeatureGroupName=FEATURE_GROUP_NAME,
-            RecordIdentifierValueAsString=objectid,
-        )
-    except Exception as e:
-        logger.warning("get_record failed for objectid=%s: %s, will process", objectid, e)
-        return True
+def check_lineage_athena(objectids: list[str], current_gold_sha: str) -> dict[str, bool]:
+    if not objectids:
+        return {}
 
-    record = response.get("Record")
-    if not record:
-        logger.info("objectid=%s not in Feature Store, will process", objectid)
-        return True
+    region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION", "us-west-2")
+    athena = boto3.client("athena", region_name=region)
 
-    metadata_str = ""
-    for feature in record:
-        if feature["FeatureName"] == "metadata":
-            metadata_str = feature["ValueAsString"]
+    database = "sagemaker_featurestore"
+    table = f'"{FEATURE_GROUP_NAME}"'
+
+    ids_str = ", ".join(f"'{oid}'" for oid in objectids)
+    query = f"SELECT objectid, metadata FROM {table} WHERE objectid IN ({ids_str})"
+
+    execution = athena.start_query_execution(
+        QueryString=query,
+        QueryExecutionContext={"Database": database},
+        WorkGroup="primary",
+    )
+    execution_id = execution["QueryExecutionId"]
+
+    while True:
+        result = athena.get_query_execution(QueryExecutionId=execution_id)
+        state = result["QueryExecution"]["Status"]["State"]
+        if state in ("SUCCEEDED",):
             break
+        if state in ("FAILED", "CANCELLED"):
+            reason = result["QueryExecution"]["Status"].get("StateChangeReason", "unknown")
+            logger.warning("Athena query failed: %s", reason)
+            return {}
+        time.sleep(1)
 
-    if not metadata_str:
-        logger.info("objectid=%s has no metadata, will process", objectid)
-        return True
+    rows = athena.get_query_results(QueryExecutionId=execution_id)
+    existing = {}
+    for row in rows.get("ResultSet", {}).get("Rows", [])[1:]:
+        cols = row["Data"]
+        oid = cols[0]["VarCharValue"]
+        metadata_str = cols[1].get("VarCharValue", "")
+        try:
+            metadata = json.loads(metadata_str)
+            stored_sha = metadata.get("gold_git_sha", "")
+        except (json.JSONDecodeError, TypeError):
+            stored_sha = ""
+        existing[oid] = stored_sha == current_gold_sha
 
-    try:
-        metadata = json.loads(metadata_str)
-    except json.JSONDecodeError:
-        logger.warning("objectid=%s metadata not valid JSON, will process", objectid)
-        return True
-
-    stored_sha = metadata.get("gold_git_sha", "")
-    if stored_sha == current_gold_sha:
-        logger.info("objectid=%s already processed with SHA %s, skipping", objectid, current_gold_sha)
-        return False
-
-    logger.info("objectid=%s SHA mismatch (stored=%s current=%s), will reprocess", objectid, stored_sha, current_gold_sha)
-    return True
+    return existing
 
 
 def reset():

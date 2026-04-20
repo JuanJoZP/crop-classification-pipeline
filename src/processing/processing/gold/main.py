@@ -7,6 +7,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from processing.gold import io, stats
 from processing.gold.preprocessor import process_single
 
+S3_BUCKET = os.environ["S3_BUCKET"]
+GIT_SHA = os.environ.get("GIT_SHA", "unknown")
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,6 +22,24 @@ def run() -> tuple[int, int]:
     if total == 0:
         logger.warning("No silver sidecars found, exiting")
         return 0, 0
+
+    objectids = []
+    sidecar_data = []
+    for path in sidecar_paths:
+        try:
+            sidecar = io.load_silver_sidecar(path)
+            props = sidecar.get("properties", {})
+            objectid = str(props.get("objectid", ""))
+            objectids.append(objectid)
+            sidecar_data.append((path, objectid, sidecar))
+        except Exception:
+            sidecar_data.append((path, "", None))
+
+    logger.info("Checking lineage via Athena for %d objectids", len(objectids))
+    lineage_cache = io.check_lineage_athena(objectids, GIT_SHA)
+    logger.info("Lineage check: %d already processed, %d to process",
+                sum(1 for v in lineage_cache.values() if v),
+                sum(1 for v in lineage_cache.values() if not v))
 
     io.reset()
     stats.reset()
@@ -45,7 +66,8 @@ def run() -> tuple[int, int]:
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
-            executor.submit(process_single, path): idx for idx, path in enumerate(sidecar_paths)
+            executor.submit(process_single, path, lineage_cache): idx
+            for idx, (path, objectid, sidecar) in enumerate(sidecar_data)
         }
 
         if has_tqdm:
