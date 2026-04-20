@@ -47,7 +47,13 @@ def _parse_year(periodo: str) -> int:
 
 def _parse_semester(intervalo: str) -> int:
     if intervalo:
-        return int(intervalo.replace("s", "").replace("S", "")) or 1
+        low = intervalo.lower().strip()
+        if "i" in low or "semestre i" in low:
+            return 1
+        if "ii" in low or "semestre ii" in low:
+            return 2
+        digits = "".join(c for c in intervalo if c.isdigit())
+        return int(digits) if digits else 1
     return 1
 
 
