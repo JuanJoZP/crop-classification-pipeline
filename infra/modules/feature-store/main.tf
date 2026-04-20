@@ -191,7 +191,7 @@ resource "aws_sagemaker_feature_group" "this" {
       s3_uri = "s3://${var.bucket_name}/feature-store"
     }
 
-    disable_glue_table_creation = true
+    disable_glue_table_creation = false
   }
 
 }
