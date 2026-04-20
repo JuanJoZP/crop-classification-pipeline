@@ -16,6 +16,8 @@ S3_BUCKET = os.environ["S3_BUCKET"]
 POLYGONS_KEY = os.environ["POLYGONS_KEY"]
 GIT_SHA = os.environ.get("GIT_SHA", "unknown")
 METRICS_INTERVAL = int(os.environ.get("METRICS_INTERVAL", "120"))
+OFFSET = int(os.environ.get("OFFSET", "0"))
+LIMIT = int(os.environ.get("LIMIT", "0"))
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -74,6 +76,10 @@ def main():
     config = load_config()
     copernicus_creds = get_copernicus_creds()
     gdf = load_polygons(POLYGONS_KEY)
+    if OFFSET > 0 or LIMIT > 0:
+        start = OFFSET
+        end = OFFSET + LIMIT if LIMIT > 0 else len(gdf)
+        gdf = gdf.iloc[start:end]
     logger.info("Columns: %s", list(gdf.columns))
     logger.info("CRS: %s", gdf.crs)
 

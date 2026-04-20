@@ -9,6 +9,8 @@ import xarray as xr
 S3_BUCKET = os.environ["S3_BUCKET"]
 RAW_PREFIX = os.environ.get("RAW_PREFIX", "raw")
 PROCESSED_PREFIX = os.environ.get("PROCESSED_PREFIX", "processed")
+OFFSET = int(os.environ.get("OFFSET", "0"))
+LIMIT = int(os.environ.get("LIMIT", "0"))
 
 s3_client = boto3.client("s3")
 
@@ -27,7 +29,15 @@ def discover_parcels() -> list[str]:
             if key.endswith("_metadata.json") and f"{RAW_PREFIX}/" in key:
                 sidecar_keys.append(key)
 
+    sidecar_keys.sort()
     logger.info("Found %d bronze sidecars", len(sidecar_keys))
+
+    if OFFSET > 0 or LIMIT > 0:
+        start = OFFSET
+        end = OFFSET + LIMIT if LIMIT > 0 else len(sidecar_keys)
+        sidecar_keys = sidecar_keys[start:end]
+        logger.info("Sliced to offset=%d limit=%d -> %d sidecars", OFFSET, LIMIT, len(sidecar_keys))
+
     return sidecar_keys
 
 

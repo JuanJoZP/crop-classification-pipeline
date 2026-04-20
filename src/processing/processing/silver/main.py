@@ -20,6 +20,8 @@ from processing.silver.sidecar import build_sidecar, should_process
 
 S3_BUCKET = os.environ["S3_BUCKET"]
 GIT_SHA = os.environ.get("GIT_SHA", "unknown")
+OFFSET = int(os.environ.get("OFFSET", "0"))
+LIMIT = int(os.environ.get("LIMIT", "0"))
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -74,7 +76,7 @@ def main():
     s3 = s3fs_lib.S3FileSystem(anon=False)
 
     sidecar_keys = discover_parcels()
-    logger.info("Found %d parcels to process", len(sidecar_keys))
+    logger.info("Found %d parcels to process (offset=%d, limit=%d)", len(sidecar_keys), OFFSET, LIMIT)
 
     wall_start = time.monotonic()
 
