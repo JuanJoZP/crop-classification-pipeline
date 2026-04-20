@@ -14,21 +14,41 @@ GIT_SHA = os.environ.get("GIT_SHA", "unknown")
 s3_client = boto3.client("s3")
 
 
-def _parse_event(event: Dict[str, Any]) -> Tuple[List[str], List[str], int]:
+def _parse_event(event: Dict[str, Any]) -> Tuple[List[str], List[str], int, int, int]:
     if isinstance(event.get("body"), str):
         body: Dict[str, Any] = json.loads(event["body"])
         municipios: List[str] = body.get("municipios", [])
         periodos: List[str] = body.get("periodos", [])
         limit: int = body.get("limit", 0)
+        batch_size: int = body.get("batch_size", 0)
+        silver_batch_size: int = body.get("silver_batch_size", 0)
     elif isinstance(event.get("body"), dict):
         municipios = event.get("municipios") or event["body"].get("municipios", [])
         periodos = event.get("periodos") or event["body"].get("periodos", [])
         limit = event.get("limit") or event["body"].get("limit", 0)
+        batch_size = event.get("batch_size") or event["body"].get("batch_size", 0)
+        silver_batch_size = event.get("silver_batch_size") or event["body"].get("silver_batch_size", 0)
     else:
         municipios = event.get("municipios", [])
         periodos = event.get("periodos", [])
         limit = event.get("limit", 0)
-    return municipios, periodos, limit
+        batch_size = event.get("batch_size", 0)
+        silver_batch_size = event.get("silver_batch_size", 0)
+    return municipios, periodos, limit, batch_size, silver_batch_size
+
+
+def _compute_batches(total: int, batch_size: int, s3_key: str, include_key: bool = True) -> List[Dict[str, Any]]:
+    if batch_size <= 0:
+        batch_size = total
+    batches = []
+    for offset in range(0, total, batch_size):
+        remaining = total - offset
+        size = min(batch_size, remaining)
+        batch: Dict[str, Any] = {"offset": offset, "limit": size}
+        if include_key:
+            batch["polygons_key"] = s3_key
+        batches.append(batch)
+    return batches
 
 
 def _upload_to_s3(data: bytes, key: str, metadata: Dict[str, str]) -> str:
@@ -43,37 +63,24 @@ def _upload_to_s3(data: bytes, key: str, metadata: Dict[str, str]) -> str:
 
 
 def handle(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    municipios, periodos, limit = _parse_event(event)
+    municipios, periodos, limit, batch_size, silver_batch_size = _parse_event(event)
 
     if not municipios or not periodos:
-        return {
-            "statusCode": 400,
-            "body": json.dumps({"error": "municipios and periodos are required"}),
-        }
+        raise ValueError("municipios and periodos are required")
 
     invalid = validate_municipalities(municipios)
     if invalid:
-        return {
-            "statusCode": 400,
-            "body": json.dumps(
-                {
-                    "error": f"Invalid municipalities: {invalid}. "
-                    f"See municipalities_papa.json for valid names.",
-                }
-            ),
-        }
+        raise ValueError(
+            f"Invalid municipalities: {invalid}. "
+            f"See municipalities_papa.json for valid names."
+        )
 
     invalid_periods = validate_periods(periodos)
     if invalid_periods:
-        return {
-            "statusCode": 400,
-            "body": json.dumps(
-                {
-                    "error": f"Invalid periods: {invalid_periods}. "
-                    f"Valid periods: {sorted(VALID_PERIODS.keys())}.",
-                }
-            ),
-        }
+        raise ValueError(
+            f"Invalid periods: {invalid_periods}. "
+            f"Valid periods: {sorted(VALID_PERIODS.keys())}."
+        )
 
     rows = fetch_polygons(municipios, periodos)
     if limit and limit > 0:
@@ -98,16 +105,17 @@ def handle(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         metadata=metadata,
     )
 
+    total_polygons = geojson["count"]
+    bronze_batches = _compute_batches(total_polygons, batch_size, s3_key, include_key=True)
+    silver_batches = _compute_batches(total_polygons, silver_batch_size, s3_key, include_key=False)
+
     return {
-        "statusCode": 200,
-        "body": json.dumps(
-            {
-                "s3_key": s3_key,
-                "count": geojson["count"],
-                "municipios": municipios,
-                "periodos": periodos,
-                "timestamp": timestamp,
-                "git_sha": GIT_SHA,
-            }
-        ),
+        "s3_key": s3_key,
+        "total_polygons": total_polygons,
+        "municipios": municipios,
+        "periodos": periodos,
+        "timestamp": timestamp,
+        "git_sha": GIT_SHA,
+        "bronze_batches": bronze_batches,
+        "silver_batches": silver_batches,
     }

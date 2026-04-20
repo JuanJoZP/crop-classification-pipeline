@@ -15,20 +15,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
     route = ROUTERS.get(action)
     if route is None:
-        return {
-            "statusCode": 400,
-            "body": json.dumps(
-                {
-                    "error": f"Unknown action: '{action}'.",
-                    "available_actions": list(ROUTERS.keys()),
-                }
-            ),
-        }
+        raise ValueError(f"Unknown action: '{action}'. Available: {list(ROUTERS.keys())}")
 
-    try:
-        return route(event, context)
-    except Exception as e:
-        return {
-            "statusCode": 500,
-            "body": json.dumps({"error": str(e)}),
-        }
+    return route(event, context)
