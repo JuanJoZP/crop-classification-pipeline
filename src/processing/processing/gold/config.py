@@ -12,7 +12,11 @@ _ssm_client = None
 def _get_ssm_client():
     global _ssm_client
     if _ssm_client is None:
-        _ssm_client = boto3.client("ssm")
+        kwargs = {}
+        region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
+        if region:
+            kwargs["region_name"] = region
+        _ssm_client = boto3.client("ssm", **kwargs)
     return _ssm_client
 
 

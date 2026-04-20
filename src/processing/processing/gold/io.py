@@ -71,7 +71,12 @@ def get_workers() -> int:
 def _get_fs_client() -> boto3.client:
     global _fs_client
     if _fs_client is None:
-        _fs_client = boto3.client("sagemaker-featurestore-runtime")
+        import boto3 as _boto3
+        kwargs = {}
+        region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
+        if region:
+            kwargs["region_name"] = region
+        _fs_client = _boto3.client("sagemaker-featurestore-runtime", **kwargs)
         logger.info("Created FeatureStore Runtime client")
     return _fs_client
 
