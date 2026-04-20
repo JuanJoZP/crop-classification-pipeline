@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import json
 import logging
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Optional
 
 import boto3
 import psutil
@@ -52,8 +55,8 @@ RAM_THRESHOLD_PERCENT = int(os.environ.get("RAM_THRESHOLD_PERCENT", "80"))
 _pending_records: list[dict] = []
 _ingested_count: int = 0
 _ingested_lock = threading.Lock()
-_max_workers: int | None = None
-_fs_client: boto3.client | None = None
+_max_workers: Optional[int] = None
+_fs_client: Optional[boto3.client] = None
 
 
 def get_workers() -> int:
