@@ -54,19 +54,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
   }
 
   rule {
-    id     = "${var.project_prefix}-processed-expire"
-    status = "Enabled"
-
-    filter {
-      prefix = "processed/"
-    }
-
-    expiration {
-      days = var.processed_expiration_days
-    }
-  }
-
-  rule {
     id     = "${var.project_prefix}-polygons-expire"
     status = "Enabled"
 
