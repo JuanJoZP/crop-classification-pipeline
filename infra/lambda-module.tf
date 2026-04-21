@@ -15,6 +15,7 @@ module "lambda_crawl_polygons" {
   python_runtime       = local.python_runtime
   lambda_role_arn      = module.iam.lambda_polygon_crawl_role_arn
   source_path          = "${path.module}/../src/lambdas/crawl_polygons"
+  memory_size          = 512
 
   environment_variables = {
     UPRA_GEOSERVICIOS_URL = "https://geoservicios.upra.gov.co/arcgis/rest/services"
