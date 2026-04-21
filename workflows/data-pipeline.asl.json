@@ -29,7 +29,7 @@
     "RunBronzeMap": {
       "Type": "Map",
       "ItemsPath": "$.Payload.bronze_batches",
-      "MaxConcurrency": 10,
+      "MaxConcurrency": 50,
       "ResultPath": "$.bronze_results",
       "Iterator": {
         "StartAt": "RunBronzeTask",
@@ -101,7 +101,7 @@
     "RunSilverMap": {
       "Type": "Map",
       "ItemsPath": "$.Payload.silver_batches",
-      "MaxConcurrency": 10,
+      "MaxConcurrency": 50,
       "ResultPath": "$.silver_results",
       "Iterator": {
         "StartAt": "RunSilverTask",
@@ -220,6 +220,7 @@
         "Environment": {
           "S3_BUCKET": "${s3_bucket}",
           "PROCESSING_STEP": "gold",
+          "GIT_SHA": "${git_sha}",
           "FEATURE_GROUP_NAME": "${feature_group_name}"
         }
       },
