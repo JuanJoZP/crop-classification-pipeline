@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import tempfile
 
 import boto3
 import s3fs
@@ -55,24 +56,54 @@ def load_silver_sidecar(pid: str) -> dict | None:
         return json.loads(body)
     except s3_client.exceptions.NoSuchKey:
         return None
+    except s3_client.exceptions.ClientError:
+        return None
 
 
-def load_zarr(pid: str, s3: s3fs.S3FileSystem) -> xr.Dataset:
-    zarr_path = f"s3://{S3_BUCKET}/{RAW_PREFIX}/{pid}.zarr"
-    logger.info("Loading zarr from %s", zarr_path)
-    store = s3fs.S3Map(root=zarr_path, s3=s3, check=False)
-    ds = xr.open_zarr(store, consolidated=True)
-    return ds
+def load_dataset(pid: str, s3: s3fs.S3FileSystem) -> xr.Dataset:
+    nc_url = f"s3://{S3_BUCKET}/{RAW_PREFIX}/{pid}.nc"
+    zarr_url = f"s3://{S3_BUCKET}/{RAW_PREFIX}/{pid}.zarr"
+
+    if s3.exists(nc_url):
+        logger.info("Loading NetCDF from %s", nc_url)
+        fd, tmp_path = tempfile.mkstemp(suffix=".nc")
+        os.close(fd)
+        try:
+            s3.get(nc_url, tmp_path)
+            ds = xr.open_dataset(tmp_path, engine="netcdf4")
+            ds = ds.load()
+            ds.close()
+        finally:
+            os.unlink(tmp_path)
+        return ds
+
+    if s3.exists(zarr_url):
+        logger.info("Loading zarr (legacy) from %s", zarr_url)
+        store = s3fs.S3Map(root=zarr_url, s3=s3, check=False)
+        return xr.open_zarr(store, consolidated=True)
+
+    raise FileNotFoundError(f"No dataset found for parcel {pid} at {nc_url} or {zarr_url}")
 
 
-def save_zarr(pid: str, dataset: xr.Dataset, s3: s3fs.S3FileSystem) -> str:
-    zarr_path = f"s3://{S3_BUCKET}/{PROCESSED_PREFIX}/{pid}.zarr"
-    logger.info("Saving zarr to %s", zarr_path)
-    if s3.exists(zarr_path):
-        s3.rm(zarr_path, recursive=True)
-    store = s3fs.S3Map(root=zarr_path, s3=s3, check=False)
-    dataset.to_zarr(store, consolidated=True)
-    return f"{PROCESSED_PREFIX}/{pid}.zarr"
+load_zarr = load_dataset
+
+
+def save_dataset(pid: str, dataset: xr.Dataset, s3: s3fs.S3FileSystem) -> str:
+    nc_key = f"{PROCESSED_PREFIX}/{pid}.nc"
+    s3_url = f"s3://{S3_BUCKET}/{nc_key}"
+
+    logger.info("Saving NetCDF to %s", s3_url)
+    fd, tmp_path = tempfile.mkstemp(suffix=".nc")
+    os.close(fd)
+    try:
+        dataset.to_netcdf(tmp_path, format="NETCDF4")
+        s3.put(tmp_path, s3_url)
+    finally:
+        os.unlink(tmp_path)
+    return nc_key
+
+
+save_zarr = save_dataset
 
 
 def upload_silver_sidecar(pid: str, sidecar: dict) -> str:

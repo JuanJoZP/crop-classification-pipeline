@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from pathlib import Path
 
 PAPA_VARIETY = "papa"
 
@@ -15,11 +16,11 @@ class ParcelInfo:
 def parse_parcel_info(sidecar: dict) -> ParcelInfo:
     props = sidecar["properties"]
     service = props["service"]
-    pid = sidecar.get("processing_bronze_metadata", {}).get("zarr_key", "")
-    if pid:
-        pid = pid.replace("raw/", "").replace(".zarr", "")
-    else:
-        pid = f"{service}_{props.get('objectid', 'unknown')}"
+    data_key = (
+        sidecar.get("processing_bronze_metadata", {}).get("data_key", "")
+        or sidecar.get("processing_bronze_metadata", {}).get("zarr_key", "")
+    )
+    pid = Path(data_key).stem if data_key else f"{service}_{props.get('objectid', 'unknown')}"
 
     parts = service.split("_")
     year = int(parts[1]) if len(parts) > 1 else 0

@@ -66,16 +66,20 @@ def process_single(sidecar_path: str, lineage_cache: dict[str, bool] | None = No
         sidecar = io.load_silver_sidecar(sidecar_path)
         props = sidecar.get("properties", {})
         objectid = str(props.get("objectid", ""))
-        zarr_key = sidecar.get("processing_silver_metadata", {}).get("zarr_key", "")
-        if zarr_key:
-            pid = zarr_key.replace("processed/", "").replace(".zarr", "")
+        data_key = (
+            sidecar.get("processing_silver_metadata", {}).get("data_key", "")
+            or sidecar.get("processing_silver_metadata", {}).get("zarr_key", "")
+        )
+        if data_key:
+            from pathlib import Path
+            pid = Path(data_key).stem
         else:
             pid = f"{props.get('service', 'unknown')}_{props.get('objectid', 'unknown')}"
 
         if lineage_cache is not None and objectid and lineage_cache.get(objectid, False):
             return {"status": "skipped", "objectid": objectid, "pid": pid}
 
-        dataset = io.load_silver_zarr(pid)
+        dataset = io.load_silver_dataset(pid)
         record = build_record(sidecar, dataset)
         return {"status": "ok", "record": record, "pid": pid}
     except Exception as e:

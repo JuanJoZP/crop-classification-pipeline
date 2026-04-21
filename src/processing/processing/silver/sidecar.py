@@ -5,13 +5,15 @@ logger = logging.getLogger(__name__)
 
 
 def build_sidecar(
-    bronze_sidecar: dict, processing_timestamp: str, git_sha: str
+    bronze_sidecar: dict, processing_timestamp: str, git_sha: str, data_key: str = ""
 ) -> dict:
     silver_metadata = {
         "git_sha": git_sha,
         "processing_step": "silver",
         "timestamp": processing_timestamp,
     }
+    if data_key:
+        silver_metadata["data_key"] = data_key
 
     sidecar = dict(bronze_sidecar)
     sidecar["processing_silver_metadata"] = silver_metadata

@@ -19,6 +19,7 @@ dependencies = [
     "shapely",
     "tqdm",
     "xarray",
+    "netcdf4",
     "zarr",
     "bottleneck",
     "dask",

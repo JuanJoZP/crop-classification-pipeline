@@ -11,9 +11,9 @@ from processing.silver.config import load_config
 from processing.silver.io import (
     discover_parcels,
     load_bronze_sidecar,
+    load_dataset,
     load_silver_sidecar,
-    load_zarr,
-    save_zarr,
+    save_dataset,
     upload_silver_sidecar,
 )
 from processing.silver.parcel import parse_parcel_info
@@ -73,17 +73,17 @@ def process_parcel(
                 skipped += 1
             return
 
-        dataset = load_zarr(pid, s3)
+        dataset = load_dataset(pid, s3)
         logger.info("Loading dataset into memory for parcel=%s", pid)
         dataset = dataset.load()
 
         preprocessor = SilverPreprocessor(dataset, parcel, cfg)
         preprocessor.preprocess()
-        save_zarr(pid, preprocessor.dataset, s3)
+        data_key = save_dataset(pid, preprocessor.dataset, s3)
 
         processing_timestamp = datetime.now(timezone.utc).isoformat()
         silver_sidecar_data = build_sidecar(
-            bronze_sidecar, processing_timestamp, GIT_SHA
+            bronze_sidecar, processing_timestamp, GIT_SHA, data_key=data_key
         )
         upload_silver_sidecar(pid, silver_sidecar_data)
 

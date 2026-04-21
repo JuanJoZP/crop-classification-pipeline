@@ -62,8 +62,8 @@ def process_polygon(row, config: dict, copernicus_creds: dict):
         return
 
     s3 = s3fs_lib.S3FileSystem(anon=False)
-    zarr_key, volume = download_polygon(pid, row, config, copernicus_creds, s3)
-    if zarr_key is None:
+    data_key, volume = download_polygon(pid, row, config, copernicus_creds, s3)
+    if data_key is None:
         logger.warning("No data for %s, skipping sidecar", pid)
         return
 
@@ -73,7 +73,7 @@ def process_polygon(row, config: dict, copernicus_creds: dict):
 
     processing_timestamp = datetime.now(timezone.utc).isoformat()
     sidecar = build_sidecar(row, processing_timestamp, GIT_SHA, POLYGONS_KEY)
-    sidecar["processing_bronze_metadata"]["zarr_key"] = zarr_key
+    sidecar["processing_bronze_metadata"]["data_key"] = data_key
     upload_sidecar(pid, sidecar)
     logger.info("Polygon %s complete", pid)
     with completed_lock:

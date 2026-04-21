@@ -1,5 +1,6 @@
 import logging
 import os
+import tempfile
 from collections import defaultdict
 
 import numpy as np
@@ -69,19 +70,22 @@ def search_items(
     return items
 
 
-def write_zarr(pid: str, dataset: xr.Dataset, s3: s3fs.S3FileSystem):
+def write_netcdf(pid: str, dataset: xr.Dataset, s3: s3fs.S3FileSystem) -> str:
     s3_bucket = os.environ["S3_BUCKET"]
     raw_prefix = os.environ.get("RAW_PREFIX", "raw")
-    zarr_path = f"s3://{s3_bucket}/{raw_prefix}/{pid}.zarr"
+    nc_key = f"{raw_prefix}/{pid}.nc"
+    s3_url = f"s3://{s3_bucket}/{nc_key}"
 
-    logger.info("Writing zarr for %s to %s", pid, zarr_path)
-    if s3.exists(zarr_path):
-        logger.info("Removing existing zarr at %s", zarr_path)
-        s3.rm(zarr_path, recursive=True)
-    store = s3fs.S3Map(root=zarr_path, s3=s3, check=False)
-    dataset.to_zarr(store, consolidated=True)
-    logger.info("Written zarr for %s", pid)
-    return f"{raw_prefix}/{pid}.zarr"
+    logger.info("Writing NetCDF for %s to %s", pid, s3_url)
+    fd, tmp_path = tempfile.mkstemp(suffix=".nc")
+    os.close(fd)
+    try:
+        dataset.to_netcdf(tmp_path, format="NETCDF4")
+        s3.put(tmp_path, s3_url)
+    finally:
+        os.unlink(tmp_path)
+    logger.info("Written NetCDF for %s", pid)
+    return nc_key
 
 
 def download_polygon(
@@ -128,4 +132,4 @@ def download_polygon(
         * dataset.dims.get("longitude", 1)
         * dataset.dims.get("latitude", 1)
     )
-    return write_zarr(pid, dataset, s3), volume
+    return write_netcdf(pid, dataset, s3), volume

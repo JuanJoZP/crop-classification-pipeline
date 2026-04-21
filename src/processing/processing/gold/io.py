@@ -95,9 +95,20 @@ def load_silver_sidecar(path: str) -> dict:
         return json.load(f)
 
 
-def load_silver_zarr(pid: str, input_dir: str = INPUT_DIR) -> xr.Dataset:
+def load_silver_dataset(pid: str, input_dir: str = INPUT_DIR) -> xr.Dataset:
+    nc_path = os.path.join(input_dir, f"{pid}.nc")
     zarr_path = os.path.join(input_dir, f"{pid}.zarr")
-    return xr.open_zarr(zarr_path, consolidated=True)
+
+    if os.path.exists(nc_path):
+        return xr.open_dataset(nc_path, engine="netcdf4")
+
+    if os.path.isdir(zarr_path):
+        return xr.open_zarr(zarr_path, consolidated=True)
+
+    raise FileNotFoundError(f"No dataset found for parcel {pid} at {nc_path} or {zarr_path}")
+
+
+load_silver_zarr = load_silver_dataset
 
 
 def get_series_as_string(dataset: xr.Dataset, var_name: str) -> str:

@@ -122,8 +122,8 @@ Returns ArcGIS JSON `FeatureSet` with `features[].attributes = {municipio, depar
 
 ## Silver step — noise reduction, cloud masking, time range adjustment
 
-**Input**: `raw/` (zarr store per parcel, downloaded from odc-stac)  
-**Output**: `processed/` (zarr store per parcel)
+**Input**: `raw/` (NetCDF file per parcel, downloaded from odc-stac; legacy zarr supported for backward compat)
+**Output**: `processed/` (NetCDF file per parcel)
 
 ### Processing stages per parcel
 
@@ -143,7 +143,7 @@ Returns ArcGIS JSON `FeatureSet` with `features[].attributes = {municipio, depar
 
 ### Sidecar metadata
 
-- `processing_silver_metadata`: `{git_sha, timestamp, zarr_key, bronze_key}`
+- `processing_silver_metadata`: `{git_sha, timestamp, data_key, bronze_key}`
 - Inherits `processing_bronze_metadata` from bronze
 
 ### Config (`silver/config.py`)
@@ -156,10 +156,19 @@ Returns ArcGIS JSON `FeatureSet` with `features[].attributes = {municipio, depar
 | `indexes` | List of spectral indexes to compute (default: `["ndvi", "evi", "savi"]`) |
 | `calc_phenometrics` | Whether to compute phenological metrics (default: `false`) |
 
-### Zarr structure
+### Data format
+
+Files are stored as NetCDF (`.nc`) per parcel. Legacy `.zarr` stores are supported for backward compatibility — readers try `.nc` first, then fall back to `.zarr`.
 
 ```
-processed/{pid}.zarr/
+raw/{pid}.nc           (bronze — satellite imagery)
+processed/{pid}.nc     (silver — cleaned + spectral indexes)
+```
+
+Sidecar metadata uses `data_key` (e.g. `raw/{pid}.nc` or `processed/{pid}.nc`). Legacy sidecars with `zarr_key` are still readable.
+
+```
+processed/{pid}.nc
 ├── veg_index     (pixel, time)
 ├── ndvi          (pixel, time)
 ├── evi           (pixel, time)
@@ -169,7 +178,7 @@ processed/{pid}.zarr/
 
 ## Gold step — feature enrichment, normalization, label extraction
 
-**Input**: `processed/` (zarr store per parcel)  
+**Input**: `processed/` (NetCDF file per parcel; legacy zarr supported for backward compat)
 **Output**: `feature-store/` (parquet + metadata JSON)
 
 ### Processing stages

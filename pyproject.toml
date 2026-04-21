@@ -13,6 +13,7 @@ members = ["src/processing", "src/training"]
 dev = [
     "matplotlib",
     "matplotlib-inline",
+    "netcdf4",
     "xarray",
     "zarr>=2.18.3",
 ]
