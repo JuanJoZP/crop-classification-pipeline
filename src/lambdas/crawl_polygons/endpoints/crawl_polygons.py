@@ -105,10 +105,12 @@ def handle(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         metadata=metadata,
     )
 
-    total_polygons = geojson["count"]
+total_polygons = geojson["count"]
     bronze_batches = _compute_batches(total_polygons, batch_size, s3_key, include_key=True)
     silver_batches = _compute_batches(total_polygons, silver_batch_size, s3_key, include_key=True)
-    gold_job_name = f"crop-gold-{timestamp}".lower()
+    
+    gold_timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    gold_job_name = f"crop-gold-{gold_timestamp}".lower()
 
     return {
         "s3_key": s3_key,
