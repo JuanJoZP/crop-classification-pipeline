@@ -193,7 +193,7 @@
               "S3Uri": "s3://${s3_bucket}/processed/",
               "LocalPath": "/opt/ml/processing/processed",
               "S3DataType": "S3Prefix",
-              "S3InputMode": "Pipe"
+              "S3InputMode": "File"
             }
           }
         ],

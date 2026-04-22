@@ -25,15 +25,9 @@ def run() -> tuple[int, int]:
 
     objectids = []
     sidecar_data = []
-    is_s3_mode = bool(io.POLYGONS_KEY)
-
     for data_key in sidecar_paths:
         try:
-            if is_s3_mode:
-                pid = data_key.replace(f"{io.PROCESSED_PREFIX}/", "").replace(".nc", "").replace(".zarr", "")
-                sidecar = io.load_silver_sidecar_s3(pid)
-            else:
-                sidecar = io.load_silver_sidecar(data_key)
+            sidecar = io.load_silver_sidecar(data_key)
             props = sidecar.get("properties", {})
             objectid = str(props.get("objectid", ""))
             objectids.append(objectid)

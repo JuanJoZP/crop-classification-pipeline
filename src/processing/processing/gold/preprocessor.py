@@ -63,33 +63,24 @@ def _parse_semester(intervalo: str) -> int:
 
 def process_single(sidecar_path: str, lineage_cache: dict[str, bool] | None = None) -> dict:
     try:
-        is_s3_mode = bool(io.POLYGONS_KEY)
-        if is_s3_mode:
-            pid = sidecar_path.replace(f"{io.PROCESSED_PREFIX}/", "").replace(".nc", "").replace(".zarr", "")
-            sidecar = io.load_silver_sidecar_s3(pid)
-        else:
-            sidecar = io.load_silver_sidecar(sidecar_path)
-            data_key = (
-                sidecar.get("processing_silver_metadata", {}).get("data_key", "")
-                or sidecar.get("processing_silver_metadata", {}).get("zarr_key", "")
-            )
-            if data_key:
-                from pathlib import Path
-                pid = Path(data_key).stem
-            else:
-                props = sidecar.get("properties", {})
-                pid = f"{props.get('service', 'unknown')}_{props.get('objectid', 'unknown')}"
-
+        sidecar = io.load_silver_sidecar(sidecar_path)
         props = sidecar.get("properties", {})
         objectid = str(props.get("objectid", ""))
+
+        data_key = (
+            sidecar.get("processing_silver_metadata", {}).get("data_key", "")
+            or sidecar.get("processing_silver_metadata", {}).get("zarr_key", "")
+        )
+        if data_key:
+            from pathlib import Path
+            pid = Path(data_key).stem
+        else:
+            pid = f"{props.get('service', 'unknown')}_{props.get('objectid', 'unknown')}"
 
         if lineage_cache is not None and objectid and lineage_cache.get(objectid, False):
             return {"status": "skipped", "objectid": objectid, "pid": pid}
 
-        if is_s3_mode:
-            dataset = io.load_silver_dataset_s3(pid)
-        else:
-            dataset = io.load_silver_dataset(pid)
+        dataset = io.load_silver_dataset(pid)
 
         record = build_record(sidecar, dataset)
         return {"status": "ok", "record": record, "pid": pid}
