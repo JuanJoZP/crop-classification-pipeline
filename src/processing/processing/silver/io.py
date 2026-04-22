@@ -47,6 +47,56 @@ def discover_parcels() -> list[str]:
     return sidecar_keys
 
 
+def _polygon_id_from_feature(feature: dict) -> str:
+    props = feature.get("properties", {})
+    service = props.get("service", "")
+    objectid = props.get("objectid", "")
+    if isinstance(objectid, str):
+        objectid = objectid.replace(" ", "_")
+    return f"{service}_{objectid}"
+
+
+def discover_parcels_from_polygons_key(polygons_key: str, offset: int, limit: int) -> list[str]:
+    logger.info("Loading polygons from s3://%s/%s", S3_BUCKET, polygons_key)
+
+    response = s3_client.get_object(Bucket=S3_BUCKET, Key=polygons_key)
+    body = response["Body"].read().decode("utf-8")
+    geojson = json.loads(body)
+
+    polygon_ids = []
+    for feature in geojson.get("features", []):
+        pid = _polygon_id_from_feature(feature)
+        if pid:
+            polygon_ids.append(pid)
+
+    logger.info("Extracted %d polygon_ids from polygons JSON", len(polygon_ids))
+
+    if offset > 0 or limit > 0:
+        start = offset
+        end = offset + limit if limit > 0 else len(polygon_ids)
+        polygon_ids = polygon_ids[start:end]
+        logger.info(
+            "Sliced to offset=%d limit=%d -> %d polygon_ids",
+            offset,
+            limit,
+            len(polygon_ids),
+        )
+
+    sidecar_keys = []
+    for pid in polygon_ids:
+        sidecar_key = f"{RAW_PREFIX}/{pid}_metadata.json"
+        try:
+            s3_client.head_object(Bucket=S3_BUCKET, Key=sidecar_key)
+            sidecar_keys.append(sidecar_key)
+        except s3_client.exceptions.NoSuchKey:
+            logger.debug("No sidecar for %s, skipping", pid)
+        except s3_client.exceptions.ClientError:
+            logger.debug("Error checking sidecar for %s, skipping", pid)
+
+    logger.info("Found %d sidecars with data", len(sidecar_keys))
+    return sidecar_keys
+
+
 def load_bronze_sidecar(key: str) -> dict:
     response = s3_client.get_object(Bucket=S3_BUCKET, Key=key)
     body = response["Body"].read().decode("utf-8")

@@ -107,7 +107,7 @@ def handle(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
     total_polygons = geojson["count"]
     bronze_batches = _compute_batches(total_polygons, batch_size, s3_key, include_key=True)
-    silver_batches = _compute_batches(total_polygons, silver_batch_size, s3_key, include_key=False)
+    silver_batches = _compute_batches(total_polygons, silver_batch_size, s3_key, include_key=True)
     gold_job_name = f"crop-gold-{timestamp}".lower()
 
     return {

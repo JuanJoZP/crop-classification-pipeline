@@ -134,6 +134,7 @@
                     "Environment": [
                       { "Name": "S3_BUCKET", "Value": "${s3_bucket}" },
                       { "Name": "PROCESSING_STEP", "Value": "silver" },
+                      { "Name": "POLYGONS_KEY", "Value.$": "$.polygons_key" },
                       { "Name": "OFFSET", "Value.$": "$.offset" },
                       { "Name": "LIMIT", "Value.$": "$.limit" },
                       { "Name": "GIT_SHA", "Value": "${git_sha}" },

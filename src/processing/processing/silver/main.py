@@ -10,6 +10,7 @@ import s3fs as s3fs_lib
 from processing.silver.config import load_config
 from processing.silver.io import (
     discover_parcels,
+    discover_parcels_from_polygons_key,
     load_bronze_sidecar,
     load_dataset,
     load_silver_sidecar,
@@ -176,7 +177,12 @@ def main():
     cfg = load_config()
     s3 = s3fs_lib.S3FileSystem(anon=False)
 
-    sidecar_keys = discover_parcels()
+    POLYGONS_KEY = os.environ.get("POLYGONS_KEY", "")
+    if POLYGONS_KEY:
+        sidecar_keys = discover_parcels_from_polygons_key(POLYGONS_KEY, OFFSET, LIMIT)
+    else:
+        sidecar_keys = discover_parcels()
+
     logger.info("Found %d parcels to process (offset=%d, limit=%d)", len(sidecar_keys), OFFSET, LIMIT)
 
     wall_start = time.monotonic()
