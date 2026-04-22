@@ -308,7 +308,7 @@ def check_lineage_athena(
         time.sleep(1)
 
     rows = athena.get_query_results(QueryExecutionId=execution_id)
-    existing = {}
+    existing = {oid: False for oid in objectids}
     for row in rows.get("ResultSet", {}).get("Rows", [])[1:]:
         cols = row["Data"]
         oid = cols[0]["VarCharValue"]
