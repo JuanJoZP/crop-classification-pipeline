@@ -57,6 +57,7 @@ LIST_INDEXES = [
 RAM_THRESHOLD_PERCENT = int(os.environ.get("RAM_THRESHOLD_PERCENT", "80"))
 
 _pending_records: list[dict] = []
+_pending_lock = threading.Lock()
 _ingested_count: int = 0
 _ingested_lock = threading.Lock()
 _max_workers: Optional[int] = None
@@ -225,27 +226,34 @@ def _ingest_records(records: list[dict]):
 
 def flush_batch():
     global _pending_records
-    if _pending_records:
+    with _pending_lock:
+        if not _pending_records:
+            return
         records = _pending_records
         _pending_records = []
-        _ingest_records(records)
+    _ingest_records(records)
 
 
 def add_to_batch(record: dict):
-    _pending_records.append(record)
-    mem_percent = psutil.virtual_memory().percent
+    with _pending_lock:
+        _pending_records.append(record)
+        mem_percent = psutil.virtual_memory().percent
+        if mem_percent >= RAM_THRESHOLD_PERCENT:
+            logger.info(
+                "RAM usage %.1f%% >= threshold %d%%, flushing %d pending records",
+                mem_percent,
+                RAM_THRESHOLD_PERCENT,
+                len(_pending_records),
+            )
+            records = _pending_records
+            _pending_records = []
     if mem_percent >= RAM_THRESHOLD_PERCENT:
-        logger.info(
-            "RAM usage %.1f%% >= threshold %d%%, flushing %d pending records",
-            mem_percent,
-            RAM_THRESHOLD_PERCENT,
-            len(_pending_records),
-        )
-        flush_batch()
+        _ingest_records(records)
 
 
 def get_queue_size() -> int:
-    return len(_pending_records)
+    with _pending_lock:
+        return len(_pending_records)
 
 
 def _resolve_athena_table() -> str:
@@ -325,6 +333,7 @@ def check_lineage_athena(
 
 def reset():
     global _ingested_count, _pending_records, _fs_client
+    with _pending_lock:
+        _pending_records = []
     _ingested_count = 0
-    _pending_records = []
     _fs_client = None
