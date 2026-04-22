@@ -8,6 +8,9 @@ SSM_PREFIX = os.environ.get("SSM_PREFIX", "/crop-classification")
 logger = logging.getLogger(__name__)
 _ssm_client = None
 
+AREA_THRESHOLD_HA = float(os.environ.get("AREA_THRESHOLD_HA", "10.0"))
+CELL_SIZE_M = float(os.environ.get("CELL_SIZE_M", "223.0"))
+
 
 def _get_ssm_client():
     global _ssm_client
@@ -43,4 +46,6 @@ def load_config() -> dict:
         ],
         "calc_phenometrics": calc_phenometrics_raw.lower() in ("true", "1", "yes"),
         "indexes": [i.strip() for i in indexes_raw.split(",")],
+        "area_threshold_ha": AREA_THRESHOLD_HA,
+        "cell_size_m": CELL_SIZE_M,
     }

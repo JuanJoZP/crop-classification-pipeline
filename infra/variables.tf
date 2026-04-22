@@ -15,3 +15,15 @@ variable "budget_alert_email" {
   type        = string
   default     = "juanzpjose136@gmail.com"
 }
+
+variable "silver_area_threshold_ha" {
+  description = "Area threshold in hectares above which polygons are split into grid cells"
+  type        = number
+  default     = 10.0
+}
+
+variable "silver_cell_size_m" {
+  description = "Grid cell size in meters for splitting large polygons"
+  type        = number
+  default     = 223.0
+}

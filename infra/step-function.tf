@@ -70,6 +70,8 @@ resource "aws_sfn_state_machine" "data_pipeline" {
       gold_volume_size           = local.sagemaker_processing.gold.volume_size_in_gb
       gold_job_name               = "${var.project_prefix}-gold-processing"
       feature_group_name          = module.feature_store.feature_group_name
+      area_threshold_ha           = tostring(var.silver_area_threshold_ha)
+      cell_size_m                 = tostring(var.silver_cell_size_m)
     }
   )
 

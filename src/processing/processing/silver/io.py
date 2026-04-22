@@ -37,7 +37,12 @@ def discover_parcels() -> list[str]:
         start = OFFSET
         end = OFFSET + LIMIT if LIMIT > 0 else len(sidecar_keys)
         sidecar_keys = sidecar_keys[start:end]
-        logger.info("Sliced to offset=%d limit=%d -> %d sidecars", OFFSET, LIMIT, len(sidecar_keys))
+        logger.info(
+            "Sliced to offset=%d limit=%d -> %d sidecars",
+            OFFSET,
+            LIMIT,
+            len(sidecar_keys),
+        )
 
     return sidecar_keys
 
@@ -82,7 +87,9 @@ def load_dataset(pid: str, s3: s3fs.S3FileSystem) -> xr.Dataset:
         store = s3fs.S3Map(root=zarr_url, s3=s3, check=False)
         return xr.open_zarr(store, consolidated=True)
 
-    raise FileNotFoundError(f"No dataset found for parcel {pid} at {nc_url} or {zarr_url}")
+    raise FileNotFoundError(
+        f"No dataset found for parcel {pid} at {nc_url} or {zarr_url}"
+    )
 
 
 load_zarr = load_dataset

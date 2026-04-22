@@ -136,7 +136,9 @@
                       { "Name": "PROCESSING_STEP", "Value": "silver" },
                       { "Name": "OFFSET", "Value.$": "$.offset" },
                       { "Name": "LIMIT", "Value.$": "$.limit" },
-                      { "Name": "GIT_SHA", "Value": "${git_sha}" }
+                      { "Name": "GIT_SHA", "Value": "${git_sha}" },
+                      { "Name": "AREA_THRESHOLD_HA", "Value": "${area_threshold_ha}" },
+                      { "Name": "CELL_SIZE_M", "Value": "${cell_size_m}" }
                     ]
                   }
                 ]

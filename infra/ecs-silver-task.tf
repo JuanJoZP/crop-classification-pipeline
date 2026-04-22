@@ -19,6 +19,8 @@ resource "aws_ecs_task_definition" "silver" {
         { name = "S3_BUCKET", value = var.bucket_name },
         { name = "PROCESSING_STEP", value = "silver" },
         { name = "GIT_SHA", value = data.external.git_commit.result.commit },
+        { name = "AREA_THRESHOLD_HA", value = tostring(var.silver_area_threshold_ha) },
+        { name = "CELL_SIZE_M", value = tostring(var.silver_cell_size_m) },
       ]
 
       logConfiguration = {
