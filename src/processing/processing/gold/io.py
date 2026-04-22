@@ -73,6 +73,7 @@ def _get_fs_client() -> boto3.client:
     global _fs_client
     if _fs_client is None:
         import boto3 as _boto3
+
         kwargs = {}
         region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
         if region:
@@ -105,7 +106,9 @@ def load_silver_dataset(pid: str, input_dir: str = INPUT_DIR) -> xr.Dataset:
     if os.path.isdir(zarr_path):
         return xr.open_zarr(zarr_path, consolidated=True)
 
-    raise FileNotFoundError(f"No dataset found for parcel {pid} at {nc_path} or {zarr_path}")
+    raise FileNotFoundError(
+        f"No dataset found for parcel {pid} at {nc_path} or {zarr_path}"
+    )
 
 
 load_silver_zarr = load_silver_dataset
@@ -196,18 +199,44 @@ def get_queue_size() -> int:
     return len(_pending_records)
 
 
-def check_lineage_athena(objectids: list[str], current_gold_sha: str) -> dict[str, bool]:
+def _resolve_athena_table() -> str:
+    region = os.environ.get("AWS_REGION") or os.environ.get(
+        "AWS_DEFAULT_REGION", "us-west-2"
+    )
+    glue = boto3.client("glue", region_name=region)
+    database = "sagemaker_featurestore"
+
+    fg_name = FEATURE_GROUP_NAME.replace("-", "_")
+    response = glue.get_tables(DatabaseName=database, Expression=f"{fg_name}*")
+    tables = response.get("TableList", [])
+    if not tables:
+        raise RuntimeError(
+            f"No Glue table found matching '{fg_name}*' in database '{database}'. "
+            f"Available: {[t['Name'] for t in glue.get_tables(DatabaseName=database).get('TableList', [])]}"
+        )
+
+    table_name = tables[0]["Name"]
+    logger.info("Resolved Athena table: %s.%s", database, table_name)
+    return database, table_name
+
+
+def check_lineage_athena(
+    objectids: list[str], current_gold_sha: str
+) -> dict[str, bool]:
     if not objectids:
         return {}
 
-    region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION", "us-west-2")
+    region = os.environ.get("AWS_REGION") or os.environ.get(
+        "AWS_DEFAULT_REGION", "us-west-2"
+    )
     athena = boto3.client("athena", region_name=region)
 
-    database = "sagemaker_featurestore"
-    table = f'"{FEATURE_GROUP_NAME}"'
+    database, table_name = _resolve_athena_table()
 
     ids_str = ", ".join(f"'{oid}'" for oid in objectids)
-    query = f"SELECT objectid, metadata FROM {table} WHERE objectid IN ({ids_str})"
+    query = (
+        f'SELECT objectid, metadata FROM "{table_name}" WHERE objectid IN ({ids_str})'
+    )
 
     execution = athena.start_query_execution(
         QueryString=query,
@@ -222,7 +251,9 @@ def check_lineage_athena(objectids: list[str], current_gold_sha: str) -> dict[st
         if state in ("SUCCEEDED",):
             break
         if state in ("FAILED", "CANCELLED"):
-            reason = result["QueryExecution"]["Status"].get("StateChangeReason", "unknown")
+            reason = result["QueryExecution"]["Status"].get(
+                "StateChangeReason", "unknown"
+            )
             logger.warning("Athena query failed: %s", reason)
             return {}
         time.sleep(1)
