@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 
 import boto3
-
 from client import VALID_PERIODS, fetch_polygons, rows_to_geojson, validate_periods
 from municipalities import validate_municipalities
 
@@ -27,7 +26,9 @@ def _parse_event(event: Dict[str, Any]) -> Tuple[List[str], List[str], int, int,
         periodos = event.get("periodos") or event["body"].get("periodos", [])
         limit = event.get("limit") or event["body"].get("limit", 0)
         batch_size = event.get("batch_size") or event["body"].get("batch_size", 0)
-        silver_batch_size = event.get("silver_batch_size") or event["body"].get("silver_batch_size", 0)
+        silver_batch_size = event.get("silver_batch_size") or event["body"].get(
+            "silver_batch_size", 0
+        )
     else:
         municipios = event.get("municipios", [])
         periodos = event.get("periodos", [])
@@ -37,7 +38,9 @@ def _parse_event(event: Dict[str, Any]) -> Tuple[List[str], List[str], int, int,
     return municipios, periodos, limit, batch_size, silver_batch_size
 
 
-def _compute_batches(total: int, batch_size: int, s3_key: str, include_key: bool = True) -> List[Dict[str, Any]]:
+def _compute_batches(
+    total: int, batch_size: int, s3_key: str, include_key: bool = True
+) -> List[Dict[str, Any]]:
     if batch_size <= 0:
         batch_size = total
     batches = []
@@ -105,10 +108,14 @@ def handle(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         metadata=metadata,
     )
 
-total_polygons = geojson["count"]
-    bronze_batches = _compute_batches(total_polygons, batch_size, s3_key, include_key=True)
-    silver_batches = _compute_batches(total_polygons, silver_batch_size, s3_key, include_key=True)
-    
+    total_polygons = geojson["count"]
+    bronze_batches = _compute_batches(
+        total_polygons, batch_size, s3_key, include_key=True
+    )
+    silver_batches = _compute_batches(
+        total_polygons, silver_batch_size, s3_key, include_key=True
+    )
+
     gold_timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     gold_job_name = f"crop-gold-{gold_timestamp}".lower()
 
