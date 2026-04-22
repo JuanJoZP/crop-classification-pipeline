@@ -33,3 +33,8 @@ resource "aws_iam_role_policy_attachment" "silver_fargate_ssm_read" {
   role       = aws_iam_role.silver_fargate_task.name
   policy_arn = aws_iam_policy.ssm_read_processor.arn
 }
+
+resource "aws_iam_role_policy_attachment" "silver_fargate_s3_read_polygons" {
+  role       = aws_iam_role.silver_fargate_task.name
+  policy_arn = aws_iam_policy.s3_read_polygons.arn
+}
