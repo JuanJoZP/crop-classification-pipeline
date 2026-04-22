@@ -10,12 +10,16 @@ from typing import Optional
 
 import boto3
 import psutil
+import s3fs
 import xarray as xr
 
 logger = logging.getLogger(__name__)
 
 INPUT_DIR = os.environ.get("GOLD_INPUT_DIR", "/opt/ml/processing/processed")
 FEATURE_GROUP_NAME = os.environ.get("FEATURE_GROUP_NAME", "crop-polygon-features")
+S3_BUCKET = os.environ["S3_BUCKET"]
+PROCESSED_PREFIX = os.environ.get("PROCESSED_PREFIX", "processed")
+POLYGONS_KEY = os.environ.get("POLYGONS_KEY", "")
 
 LIST_BANDS = [
     "coastal",
@@ -91,7 +95,73 @@ def discover_silver_sidecars(input_dir: str = INPUT_DIR) -> list[str]:
     return [str(f) for f in sidecar_files]
 
 
+def _polygon_id_from_feature(feature: dict) -> str:
+    props = feature.get("properties", {})
+    service = props.get("service", "")
+    objectid = props.get("objectid", "")
+    if isinstance(objectid, str):
+        objectid = objectid.replace(" ", "_")
+    return f"{service}_{objectid}"
+
+
+def discover_silver_from_polygons_key() -> list[str]:
+    if not POLYGONS_KEY:
+        logger.warning("POLYGONS_KEY not set, falling back to scanning input_dir")
+        return discover_silver_sidecars(INPUT_DIR)
+
+    logger.info("Loading polygons from s3://%s/%s", S3_BUCKET, POLYGONS_KEY)
+
+    s3_client = boto3.client("s3")
+    response = s3_client.get_object(Bucket=S3_BUCKET, Key=POLYGONS_KEY)
+    body = response["Body"].read().decode("utf-8")
+    geojson = json.loads(body)
+
+    polygon_ids = []
+    for feature in geojson.get("features", []):
+        pid = _polygon_id_from_feature(feature)
+        if pid:
+            polygon_ids.append(pid)
+
+    logger.info("Extracted %d polygon_ids from polygons JSON", len(polygon_ids))
+
+    s3 = s3fs.S3FileSystem(anon=False)
+    paginator = s3_client.get_paginator("list_objects_v2")
+    processed_prefix = f"{PROCESSED_PREFIX}/"
+
+    sidecar_paths = set()
+    for pid in polygon_ids:
+        base_nc = f"{processed_prefix}{pid}.nc"
+        base_zarr = f"{processed_prefix}{pid}.zarr"
+        base_nc_url = f"s3://{S3_BUCKET}/{base_nc}"
+        base_zarr_url = f"s3://{S3_BUCKET}/{base_zarr}"
+
+        if s3.exists(base_nc_url):
+            sidecar_paths.add(base_nc)
+        elif s3.exists(base_zarr_url):
+            sidecar_paths.add(base_zarr)
+        else:
+            split_prefix = f"{processed_prefix}{pid}_"
+            pages = paginator.paginate(Bucket=S3_BUCKET, Prefix=split_prefix)
+            for page in pages:
+                for obj in page.get("Contents", []):
+                    key = obj["Key"]
+                    if key.endswith(".nc") or key.endswith(".zarr"):
+                        sidecar_paths.add(key)
+
+    logger.info("Found %d silver datasets (including splits)", len(sidecar_paths))
+    return sorted(sidecar_paths)
+
+    logger.info("Found %d silver datasets with data", len(sidecar_paths))
+    return sidecar_paths
+
+
 def load_silver_sidecar(path: str) -> dict:
+    if path.startswith("s3://"):
+        s3_client = boto3.client("s3")
+        bucket, key = path.replace("s3://", "").split("/", 1)
+        response = s3_client.get_object(Bucket=bucket, Key=key)
+        body = response["Body"].read().decode("utf-8")
+        return json.loads(body)
     with open(path) as f:
         return json.load(f)
 
@@ -109,6 +179,34 @@ def load_silver_dataset(pid: str, input_dir: str = INPUT_DIR) -> xr.Dataset:
     raise FileNotFoundError(
         f"No dataset found for parcel {pid} at {nc_path} or {zarr_path}"
     )
+
+
+def load_silver_dataset_s3(pid: str) -> xr.Dataset:
+    s3 = s3fs.S3FileSystem(anon=False)
+    nc_url = f"s3://{S3_BUCKET}/{PROCESSED_PREFIX}/{pid}.nc"
+    zarr_url = f"s3://{S3_BUCKET}/{PROCESSED_PREFIX}/{pid}.zarr"
+
+    if s3.exists(nc_url):
+        logger.info("Loading NetCDF from %s", nc_url)
+        store = s3fs.S3Map(root=nc_url.replace("s3://", "").split("/", 1)[1], s3=s3, check=False)
+        return xr.open_dataset(store, engine="netcdf4")
+
+    if s3.exists(zarr_url):
+        logger.info("Loading zarr from %s", zarr_url)
+        store = s3fs.S3Map(root=zarr_url.replace("s3://", "").split("/", 1)[1], s3=s3, check=False)
+        return xr.open_zarr(store, consolidated=True)
+
+    raise FileNotFoundError(
+        f"No dataset found for parcel {pid} at {nc_url} or {zarr_url}"
+    )
+
+
+def load_silver_sidecar_s3(pid: str) -> dict:
+    s3_client = boto3.client("s3")
+    key = f"{PROCESSED_PREFIX}/{pid}_metadata.json"
+    response = s3_client.get_object(Bucket=S3_BUCKET, Key=key)
+    body = response["Body"].read().decode("utf-8")
+    return json.loads(body)
 
 
 load_silver_zarr = load_silver_dataset

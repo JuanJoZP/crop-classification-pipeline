@@ -16,24 +16,30 @@ logger = logging.getLogger(__name__)
 def run() -> tuple[int, int]:
     logger.info("Gold processing starting")
 
-    sidecar_paths = io.discover_silver_sidecars()
+    sidecar_paths = io.discover_silver_from_polygons_key()
     total = len(sidecar_paths)
 
     if total == 0:
-        logger.warning("No silver sidecars found, exiting")
+        logger.warning("No silver datasets found, exiting")
         return 0, 0
 
     objectids = []
     sidecar_data = []
-    for path in sidecar_paths:
+    is_s3_mode = bool(io.POLYGONS_KEY)
+
+    for data_key in sidecar_paths:
         try:
-            sidecar = io.load_silver_sidecar(path)
+            if is_s3_mode:
+                pid = data_key.replace(f"{io.PROCESSED_PREFIX}/", "").replace(".nc", "").replace(".zarr", "")
+                sidecar = io.load_silver_sidecar_s3(pid)
+            else:
+                sidecar = io.load_silver_sidecar(data_key)
             props = sidecar.get("properties", {})
             objectid = str(props.get("objectid", ""))
             objectids.append(objectid)
-            sidecar_data.append((path, objectid, sidecar))
+            sidecar_data.append((data_key, objectid, sidecar))
         except Exception:
-            sidecar_data.append((path, "", None))
+            sidecar_data.append((data_key, "", None))
 
     logger.info("Checking lineage via Athena for %d objectids", len(objectids))
     lineage_cache = io.check_lineage_athena(objectids, GIT_SHA)

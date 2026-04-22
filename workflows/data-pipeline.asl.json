@@ -193,7 +193,7 @@
               "S3Uri": "s3://${s3_bucket}/processed/",
               "LocalPath": "/opt/ml/processing/processed",
               "S3DataType": "S3Prefix",
-              "S3InputMode": "File"
+              "S3InputMode": "Pipe"
             }
           }
         ],
@@ -224,7 +224,8 @@
           "S3_BUCKET": "${s3_bucket}",
           "PROCESSING_STEP": "gold",
           "GIT_SHA": "${git_sha}",
-          "FEATURE_GROUP_NAME": "${feature_group_name}"
+          "FEATURE_GROUP_NAME": "${feature_group_name}",
+          "POLYGONS_KEY.$": "$.Payload.s3_key"
         }
       },
       "Retry": [
