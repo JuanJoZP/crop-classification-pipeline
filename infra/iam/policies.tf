@@ -195,7 +195,8 @@ resource "aws_iam_policy" "glue_feature_store" {
           "glue:GetPartition",
           "glue:GetPartitions",
           "glue:BatchGetPartition",
-          "glue:GetDatabase"
+          "glue:GetDatabase",
+          "glue:GetTables"
         ]
         Resource = "*"
       }
