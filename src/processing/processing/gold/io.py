@@ -127,18 +127,15 @@ def discover_silver_from_polygons_key() -> list[str]:
     sidecar_paths = []
 
     for pid in polygon_ids:
-        base_nc = os.path.join(input_dir, f"{pid}.nc")
-        base_zarr = os.path.join(input_dir, f"{pid}.zarr")
+        base_metadata = os.path.join(input_dir, f"{pid}_metadata.json")
 
-        if os.path.exists(base_nc):
-            sidecar_paths.append(base_nc)
-        elif os.path.exists(base_zarr):
-            sidecar_paths.append(base_zarr)
+        if os.path.exists(base_metadata):
+            sidecar_paths.append(base_metadata)
         else:
-            split_prefix = f"{pid}_"
+            split_prefix = f"{pid}_metadata.json"
             if os.path.isdir(input_dir):
                 for f in os.listdir(input_dir):
-                    if f.startswith(split_prefix) and (f.endswith(".nc") or os.path.isdir(os.path.join(input_dir, f))):
+                    if f.startswith(f"{pid}_") and f.endswith("_metadata.json"):
                         path = os.path.join(input_dir, f)
                         sidecar_paths.append(path)
 
@@ -164,11 +161,6 @@ def load_silver_dataset(pid: str, input_dir: str = INPUT_DIR) -> xr.Dataset:
     raise FileNotFoundError(
         f"No dataset found for parcel {pid} at {nc_path} or {zarr_path}"
     )
-
-
-def load_silver_dataset_s3(pid: str) -> xr.Dataset:
-    s3 = s3fs.S3FileSystem(anon=False)
-    load_silver_zarr = load_silver_dataset
 
 
 def get_series_as_string(dataset: xr.Dataset, var_name: str) -> str:

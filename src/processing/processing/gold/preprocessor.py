@@ -67,13 +67,9 @@ def process_single(sidecar_path: str, lineage_cache: dict[str, bool] | None = No
         props = sidecar.get("properties", {})
         objectid = str(props.get("objectid", ""))
 
-        data_key = (
-            sidecar.get("processing_silver_metadata", {}).get("data_key", "")
-            or sidecar.get("processing_silver_metadata", {}).get("zarr_key", "")
-        )
+        data_key = sidecar.get("processing_silver_metadata", {}).get("data_key", "")
         if data_key:
-            from pathlib import Path
-            pid = Path(data_key).stem
+            pid = data_key.split("/")[-1].replace(".nc", "")
         else:
             pid = f"{props.get('service', 'unknown')}_{props.get('objectid', 'unknown')}"
 
