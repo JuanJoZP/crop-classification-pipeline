@@ -59,17 +59,13 @@ resource "aws_sfn_state_machine" "data_pipeline" {
       ecs_cluster_arn           = module.ecs.cluster_arn
       bronze_task_family         = "${var.project_prefix}-processing"
       silver_task_family         = "${var.project_prefix}-silver-processing"
+      gold_task_family           = "${var.project_prefix}-gold-processing"
       subnet_ids_json            = jsonencode(module.ecs.subnet_ids)
       security_group_id          = module.ecs.security_group_id
       s3_bucket                  = var.bucket_name
       git_sha                    = data.external.git_commit.result.commit
       ecr_image_uri              = "${module.ecr.repository_url}:latest"
-      sagemaker_gold_role_arn    = module.iam.sagemaker_processing_gold_role_arn
-      gold_instance_type         = local.sagemaker_processing.gold.instance_type
-      gold_instance_count        = local.sagemaker_processing.gold.instance_count
-      gold_volume_size           = local.sagemaker_processing.gold.volume_size_in_gb
-      gold_job_name               = "${var.project_prefix}-gold-processing"
-      feature_group_name          = module.feature_store.feature_group_name
+      feature_group_name        = module.feature_store.feature_group_name
       area_threshold_ha           = tostring(var.silver_area_threshold_ha)
       cell_size_m                 = tostring(var.silver_cell_size_m)
     }

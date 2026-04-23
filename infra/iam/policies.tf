@@ -364,7 +364,8 @@ resource "aws_iam_policy" "step_functions_run_ecs" {
         Resource = [
           aws_iam_role.ecs_task_execution.arn,
           aws_iam_role.fargate_image_copy.arn,
-          aws_iam_role.silver_fargate_task.arn
+          aws_iam_role.silver_fargate_task.arn,
+          aws_iam_role.gold_fargate_task.arn
         ]
       }
     ]

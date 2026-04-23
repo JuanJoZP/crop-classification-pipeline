@@ -1,3 +1,11 @@
+output "gold_fargate_task_role_arn" {
+  value = aws_iam_role.gold_fargate_task.arn
+}
+
+output "gold_fargate_task_role_name" {
+  value = aws_iam_role.gold_fargate_task.name
+}
+
 output "ecs_task_execution_role_arn" {
   value = aws_iam_role.ecs_task_execution.arn
 }

@@ -170,73 +170,66 @@
           }
         }
       },
-      "Next": "PrepareGoldJobName"
+"Next": "RunGoldTask"
     },
 
-    "PrepareGoldJobName": {
-      "Type": "Pass",
-      "Result": {
-        "gold_job_prefix": "crop-gold-"
-      },
-      "ResultPath": "$.gold_job",
-"Next": "RunGoldProcessing"
-    },
-
-    "RunGoldProcessing": {
+    "RunGoldTask": {
       "Type": "Task",
-      "Resource": "arn:aws:states:::sagemaker:createProcessingJob.sync",
+      "Resource": "arn:aws:states:::ecs:runTask.sync",
       "Parameters": {
-        "ProcessingJobName.$": "$.Payload.gold_job_name",
-        "ProcessingInputs": [
+        "Cluster": "${ecs_cluster_arn}",
+        "TaskDefinition": "${gold_task_family}",
+        "CapacityProviderStrategy": [
           {
-            "InputName": "processed",
-            "S3Input": {
-              "S3Uri": "s3://${s3_bucket}/processed/",
-              "LocalPath": "/opt/ml/processing/processed",
-              "S3DataType": "S3Prefix",
-              "S3InputMode": "File"
-            }
+            "CapacityProvider": "FARGATE_SPOT",
+            "Weight": 1,
+            "Base": 1
           }
         ],
-        "ProcessingOutputConfig": {
-          "Outputs": [
-            {
-              "OutputName": "feature_store",
-              "S3Output": {
-                "S3Uri": "s3://${s3_bucket}/feature-store/",
-                "LocalPath": "/opt/ml/processing/output",
-                "S3UploadMode": "EndOfJob"
-              }
-            }
-          ]
-        },
-        "ProcessingResources": {
-          "ClusterConfig": {
-            "InstanceType": "${gold_instance_type}",
-            "InstanceCount": ${gold_instance_count},
-            "VolumeSizeInGB": ${gold_volume_size}
+        "PlatformVersion": "1.4.0",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "Subnets": ${subnet_ids_json},
+            "SecurityGroups": ["${security_group_id}"],
+            "AssignPublicIp": "ENABLED"
           }
         },
-        "AppSpecification": {
-          "ImageUri": "${ecr_image_uri}"
-        },
-        "RoleArn": "${sagemaker_gold_role_arn}",
-        "Environment": {
-          "S3_BUCKET": "${s3_bucket}",
-          "PROCESSING_STEP": "gold",
-          "GIT_SHA": "${git_sha}",
-          "FEATURE_GROUP_NAME": "${feature_group_name}",
-          "POLYGONS_KEY.$": "$.Payload.s3_key"
+        "Overrides": {
+          "ContainerOverrides": [
+            {
+              "Name": "processing",
+              "Environment": [
+                { "Name": "S3_BUCKET", "Value": "${s3_bucket}" },
+                { "Name": "PROCESSING_STEP", "Value": "gold" },
+                { "Name": "POLYGONS_KEY.$": "$.Payload.s3_key" },
+                { "Name": "GIT_SHA", "Value": "${git_sha}" },
+                { "Name": "FEATURE_GROUP_NAME", "Value": "${feature_group_name}" }
+              ]
+            }
+          ]
         }
       },
       "Retry": [
         {
           "ErrorEquals": ["States.TaskFailed"],
-          "IntervalSeconds": 60,
+          "IntervalSeconds": 30,
           "MaxAttempts": 2,
           "BackoffRate": 2.0
         }
       ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "GoldTaskFailed"
+        }
+      ],
+      "End": true
+    },
+
+    "GoldTaskFailed": {
+      "Type": "Pass",
+      "Result": { "status": "failed" },
       "End": true
     }
   }

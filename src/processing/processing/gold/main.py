@@ -27,8 +27,7 @@ def run() -> tuple[int, int]:
     for data_key in sidecar_paths:
         try:
             sidecar = io.load_silver_sidecar(data_key)
-            props = sidecar.get("properties", {})
-            objectid = str(props.get("objectid", ""))
+            objectid = str(sidecar.get("properties", {}).get("objectid", ""))
             objectids.append(objectid)
             sidecar_data.append((data_key, objectid, sidecar))
         except Exception:
@@ -36,9 +35,11 @@ def run() -> tuple[int, int]:
 
     logger.info("Checking lineage via Athena for %d objectids", len(objectids))
     lineage_cache = io.check_lineage_athena(objectids, GIT_SHA)
-    logger.info("Lineage check: %d already processed, %d to process",
-                sum(1 for v in lineage_cache.values() if v),
-                sum(1 for v in lineage_cache.values() if not v))
+    logger.info(
+        "Lineage check: %d already processed, %d to process",
+        sum(1 for v in lineage_cache.values() if v),
+        sum(1 for v in lineage_cache.values() if not v),
+    )
 
     io.reset()
     stats.reset()
@@ -47,6 +48,7 @@ def run() -> tuple[int, int]:
 
     try:
         from tqdm import tqdm
+
         has_tqdm = True
     except ImportError:
         has_tqdm = False
@@ -55,7 +57,6 @@ def run() -> tuple[int, int]:
     success_count = 0
     error_count = 0
     skip_count = 0
-    results = []
     max_workers = io.get_workers()
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
@@ -71,7 +72,6 @@ def run() -> tuple[int, int]:
 
         for future in as_completed(futures):
             result = future.result()
-            results.append(result)
             status = result.get("status") if result else "error"
 
             if status == "ok":
@@ -94,6 +94,7 @@ def run() -> tuple[int, int]:
 
         if pbar:
             pbar.close()
+
     io.flush_batch()
 
     wall_elapsed = time.monotonic() - wall_start

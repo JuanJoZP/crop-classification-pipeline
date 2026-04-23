@@ -14,11 +14,7 @@ import xarray as xr
 
 logger = logging.getLogger(__name__)
 
-INPUT_DIR = os.environ.get("GOLD_INPUT_DIR", "/opt/ml/processing/processed")
-FEATURE_GROUP_NAME = os.environ.get("FEATURE_GROUP_NAME", "crop-polygon-features")
-S3_BUCKET = os.environ["S3_BUCKET"]
-PROCESSED_PREFIX = os.environ.get("PROCESSED_PREFIX", "processed")
-POLYGONS_KEY = os.environ.get("POLYGONS_KEY", "")
+INPUT_DIR = "/tmp/gold/processed"
 
 LIST_BANDS = [
     "coastal",
@@ -54,6 +50,10 @@ LIST_INDEXES = [
     "rendvi",
 ]
 
+FEATURE_GROUP_NAME = os.environ.get("FEATURE_GROUP_NAME", "crop-polygon-features")
+S3_BUCKET = os.environ["S3_BUCKET"]
+PROCESSED_PREFIX = os.environ.get("PROCESSED_PREFIX", "processed")
+POLYGONS_KEY = os.environ.get("POLYGONS_KEY", "")
 RAM_THRESHOLD_PERCENT = int(os.environ.get("RAM_THRESHOLD_PERCENT", "80"))
 
 _pending_records: list[dict] = []
@@ -76,21 +76,18 @@ def get_workers() -> int:
 def _get_fs_client() -> boto3.client:
     global _fs_client
     if _fs_client is None:
-        import boto3 as _boto3
-
         kwargs = {}
         region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
         if region:
             kwargs["region_name"] = region
-        _fs_client = _boto3.client("sagemaker-featurestore-runtime", **kwargs)
-        logger.info("Created FeatureStore Runtime client")
+        _fs_client = boto3.client("sagemaker-featurestore-runtime", **kwargs)
     return _fs_client
 
 
-def discover_silver_sidecars(input_dir: str = INPUT_DIR) -> list[str]:
+def discover_silver_sidecars() -> list[str]:
     from pathlib import Path
 
-    sidecar_files = sorted(Path(input_dir).rglob("*_metadata.json"))
+    sidecar_files = sorted(Path(INPUT_DIR).rglob("*_metadata.json"))
     logger.info("Found %d silver sidecars", len(sidecar_files))
     return [str(f) for f in sidecar_files]
 
@@ -98,50 +95,85 @@ def discover_silver_sidecars(input_dir: str = INPUT_DIR) -> list[str]:
 def _polygon_id_from_feature(feature: dict) -> str:
     props = feature.get("properties", {})
     service = props.get("service", "")
-    objectid = props.get("objectid", "")
-    if isinstance(objectid, str):
-        objectid = objectid.replace(" ", "_")
+    objectid = str(props.get("objectid", "")).replace(" ", "_")
     return f"{service}_{objectid}"
+
+
+def discover_silver_s3(polygon_ids: list[str]) -> list[tuple[str, str]]:
+    s3_client = boto3.client("s3")
+    results: list[tuple[str, str]] = []
+
+    for pid in polygon_ids:
+        prefix = f"{PROCESSED_PREFIX}/{pid}"
+        paginator = s3_client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                key = obj["Key"]
+                if key.endswith("_metadata.json"):
+                    local_path = os.path.join(INPUT_DIR, os.path.basename(key))
+                    results.append((key, local_path))
+
+    logger.info("Found %d silver sidecars in S3", len(results))
+    return results
+
+
+def download_silver_files(s3_file_list: list[tuple[str, str]]) -> list[str]:
+    os.makedirs(INPUT_DIR, exist_ok=True)
+    s3_client = boto3.client("s3")
+
+    def download_file(key: str, local_path: str) -> Optional[str]:
+        if os.path.exists(local_path):
+            return local_path
+        try:
+            s3_client.download_file(S3_BUCKET, key, local_path)
+            return local_path
+        except Exception as e:
+            logger.error("Failed to download s3://%s/%s: %s", S3_BUCKET, key, e)
+            return None
+
+    all_download_args: list[tuple[str, str]] = []
+    for key, local_path in s3_file_list:
+        all_download_args.append((key, local_path))
+        if key.endswith("_metadata.json"):
+            all_download_args.append(
+                (
+                    key.replace("_metadata.json", ".nc"),
+                    local_path.replace("_metadata.json", ".nc"),
+                )
+            )
+
+    downloaded = []
+    with ThreadPoolExecutor(max_workers=get_workers()) as executor:
+        futures = {
+            executor.submit(download_file, k, p): p for k, p in all_download_args
+        }
+        for future in as_completed(futures):
+            result = future.result()
+            if result and result.endswith("_metadata.json"):
+                downloaded.append(result)
+
+    logger.info("Downloaded %d sidecars (+ .nc files)", len(downloaded))
+    return downloaded
 
 
 def discover_silver_from_polygons_key() -> list[str]:
     if not POLYGONS_KEY:
-        logger.warning("POLYGONS_KEY not set, falling back to scanning input_dir")
-        return discover_silver_sidecars(INPUT_DIR)
+        logger.warning("POLYGONS_KEY not set, falling back to scanning local dir")
+        return discover_silver_sidecars()
 
     s3_client = boto3.client("s3")
-    logger.info("Loading polygons from s3://%s/%s", S3_BUCKET, POLYGONS_KEY)
-
     response = s3_client.get_object(Bucket=S3_BUCKET, Key=POLYGONS_KEY)
-    body = response["Body"].read().decode("utf-8")
-    geojson = json.loads(body)
+    geojson = json.loads(response["Body"].read().decode("utf-8"))
 
-    polygon_ids = []
-    for feature in geojson.get("features", []):
-        pid = _polygon_id_from_feature(feature)
-        if pid:
-            polygon_ids.append(pid)
-
+    polygon_ids = [_polygon_id_from_feature(f) for f in geojson.get("features", [])]
+    polygon_ids = [p for p in polygon_ids if p]
     logger.info("Extracted %d polygon_ids from polygons JSON", len(polygon_ids))
 
-    input_dir = INPUT_DIR
-    sidecar_paths = []
+    s3_file_list = discover_silver_s3(polygon_ids)
+    if s3_file_list:
+        download_silver_files(s3_file_list)
 
-    for pid in polygon_ids:
-        base_metadata = os.path.join(input_dir, f"{pid}_metadata.json")
-
-        if os.path.exists(base_metadata):
-            sidecar_paths.append(base_metadata)
-        else:
-            split_prefix = f"{pid}_metadata.json"
-            if os.path.isdir(input_dir):
-                for f in os.listdir(input_dir):
-                    if f.startswith(f"{pid}_") and f.endswith("_metadata.json"):
-                        path = os.path.join(input_dir, f)
-                        sidecar_paths.append(path)
-
-    logger.info("Found %d silver sidecars in local directory", len(sidecar_paths))
-    return sorted(sidecar_paths)
+    return discover_silver_sidecars()
 
 
 def load_silver_sidecar(path: str) -> dict:
@@ -149,43 +181,23 @@ def load_silver_sidecar(path: str) -> dict:
         return json.load(f)
 
 
-def load_silver_dataset(pid: str, input_dir: str = INPUT_DIR) -> xr.Dataset:
-    nc_path = os.path.join(input_dir, f"{pid}.nc")
-    zarr_path = os.path.join(input_dir, f"{pid}.zarr")
+def load_silver_dataset(pid: str) -> xr.Dataset:
+    nc_path = os.path.join(INPUT_DIR, f"{pid}.nc")
+    zarr_path = os.path.join(INPUT_DIR, f"{pid}.zarr")
 
     if os.path.exists(nc_path):
         return xr.open_dataset(nc_path, engine="netcdf4")
-
     if os.path.isdir(zarr_path):
         return xr.open_zarr(zarr_path, consolidated=True)
-
-    raise FileNotFoundError(
-        f"No dataset found for parcel {pid} at {nc_path} or {zarr_path}"
-    )
+    raise FileNotFoundError(f"No dataset found for parcel {pid}")
 
 
 def get_series_as_string(dataset: xr.Dataset, var_name: str) -> str:
     if var_name not in dataset.data_vars:
         return ""
-
     arr = dataset[var_name].values
-    if arr.ndim == 2:
-        mean_series = arr.mean(axis=0)
-    else:
-        mean_series = arr
-
+    mean_series = arr.mean(axis=0) if arr.ndim == 2 else arr
     return ",".join([str(float(x)) for x in mean_series])
-
-
-def get_ingested_count() -> int:
-    with _ingested_lock:
-        return _ingested_count
-
-
-def _add_ingested(n: int):
-    global _ingested_count
-    with _ingested_lock:
-        _ingested_count += n
 
 
 def _put_record(record: dict) -> bool:
@@ -198,8 +210,7 @@ def _put_record(record: dict) -> bool:
     ]
     try:
         _get_fs_client().put_record(
-            FeatureGroupName=FEATURE_GROUP_NAME,
-            Record=feature_values,
+            FeatureGroupName=FEATURE_GROUP_NAME, Record=feature_values
         )
         return True
     except Exception as e:
@@ -207,20 +218,33 @@ def _put_record(record: dict) -> bool:
         return False
 
 
-def _ingest_records(records: list[dict]):
+def add_to_batch(record: dict):
+    global _pending_records
+    with _pending_lock:
+        _pending_records.append(record)
+        mem_percent = psutil.virtual_memory().percent
+        if mem_percent >= RAM_THRESHOLD_PERCENT:
+            logger.info(
+                "RAM %.1f%% >= threshold, flushing %d records",
+                mem_percent,
+                len(_pending_records),
+            )
+            records = _pending_records
+            _pending_records = []
+        else:
+            return
+    _ingest_batch(records)
+
+
+def _ingest_batch(records: list[dict]):
     if not records:
         return
-
-    max_workers = get_workers()
-    success = 0
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    with ThreadPoolExecutor(max_workers=get_workers()) as executor:
         futures = {executor.submit(_put_record, r): r for r in records}
-        for future in as_completed(futures):
-            if future.result():
-                success += 1
-
-    _add_ingested(success)
+        success = sum(1 for f in as_completed(futures) if f.result())
+    global _ingested_count
+    with _ingested_lock:
+        _ingested_count += success
     logger.info("Ingested %d/%d records via Feature Store", success, len(records))
 
 
@@ -231,24 +255,12 @@ def flush_batch():
             return
         records = _pending_records
         _pending_records = []
-    _ingest_records(records)
+    _ingest_batch(records)
 
 
-def add_to_batch(record: dict):
-    with _pending_lock:
-        _pending_records.append(record)
-        mem_percent = psutil.virtual_memory().percent
-        if mem_percent >= RAM_THRESHOLD_PERCENT:
-            logger.info(
-                "RAM usage %.1f%% >= threshold %d%%, flushing %d pending records",
-                mem_percent,
-                RAM_THRESHOLD_PERCENT,
-                len(_pending_records),
-            )
-            records = _pending_records
-            _pending_records = []
-    if mem_percent >= RAM_THRESHOLD_PERCENT:
-        _ingest_records(records)
+def get_ingested_count() -> int:
+    with _ingested_lock:
+        return _ingested_count
 
 
 def get_queue_size() -> int:
@@ -256,25 +268,19 @@ def get_queue_size() -> int:
         return len(_pending_records)
 
 
-def _resolve_athena_table() -> str:
+def _resolve_athena_table() -> tuple[str, str]:
     region = os.environ.get("AWS_REGION") or os.environ.get(
         "AWS_DEFAULT_REGION", "us-west-2"
     )
     glue = boto3.client("glue", region_name=region)
     database = "sagemaker_featurestore"
-
     fg_name = FEATURE_GROUP_NAME.replace("-", "_")
-    response = glue.get_tables(DatabaseName=database, Expression=f"{fg_name}*")
-    tables = response.get("TableList", [])
+    tables = glue.get_tables(DatabaseName=database, Expression=f"{fg_name}*").get(
+        "TableList", []
+    )
     if not tables:
-        raise RuntimeError(
-            f"No Glue table found matching '{fg_name}*' in database '{database}'. "
-            f"Available: {[t['Name'] for t in glue.get_tables(DatabaseName=database).get('TableList', [])]}"
-        )
-
-    table_name = tables[0]["Name"]
-    logger.info("Resolved Athena table: %s.%s", database, table_name)
-    return database, table_name
+        raise RuntimeError(f"No Glue table found for '{fg_name}*'")
+    return database, tables[0]["Name"]
 
 
 def check_lineage_athena(
@@ -287,7 +293,6 @@ def check_lineage_athena(
         "AWS_DEFAULT_REGION", "us-west-2"
     )
     athena = boto3.client("athena", region_name=region)
-
     database, table_name = _resolve_athena_table()
 
     ids_str = ", ".join(f"'{oid}'" for oid in objectids)
@@ -305,13 +310,13 @@ def check_lineage_athena(
     while True:
         result = athena.get_query_execution(QueryExecutionId=execution_id)
         state = result["QueryExecution"]["Status"]["State"]
-        if state in ("SUCCEEDED",):
+        if state == "SUCCEEDED":
             break
         if state in ("FAILED", "CANCELLED"):
-            reason = result["QueryExecution"]["Status"].get(
-                "StateChangeReason", "unknown"
+            logger.warning(
+                "Athena query failed: %s",
+                result["QueryExecution"]["Status"].get("StateChangeReason"),
             )
-            logger.warning("Athena query failed: %s", reason)
             return {}
         time.sleep(1)
 
@@ -322,12 +327,10 @@ def check_lineage_athena(
         oid = cols[0]["VarCharValue"]
         metadata_str = cols[1].get("VarCharValue", "")
         try:
-            metadata = json.loads(metadata_str)
-            stored_sha = metadata.get("gold_git_sha", "")
+            stored_sha = json.loads(metadata_str).get("gold_git_sha", "")
         except (json.JSONDecodeError, TypeError):
             stored_sha = ""
         existing[oid] = stored_sha == current_gold_sha
-
     return existing
 
 
