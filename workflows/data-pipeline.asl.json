@@ -11,6 +11,7 @@
           "action": "crawl_polygons",
           "municipios.$": "$.municipios",
           "periodos.$": "$.periodos",
+          "services.$": "$.services",
           "batch_size.$": "$.batch_size",
           "silver_batch_size.$": "$.silver_batch_size"
         }
@@ -29,7 +30,7 @@
     "RunBronzeMap": {
       "Type": "Map",
       "ItemsPath": "$.Payload.bronze_batches",
-      "MaxConcurrency": 50,
+      "MaxConcurrency": 10,
       "ResultPath": "$.bronze_results",
       "Iterator": {
         "StartAt": "RunBronzeTask",
@@ -101,7 +102,7 @@
     "RunSilverMap": {
       "Type": "Map",
       "ItemsPath": "$.Payload.silver_batches",
-      "MaxConcurrency": 50,
+      "MaxConcurrency": 10,
       "ResultPath": "$.silver_results",
       "Iterator": {
         "StartAt": "RunSilverTask",

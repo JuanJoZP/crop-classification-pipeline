@@ -49,4 +49,5 @@ def log_metrics(stop_event: threading.Event, total: int):
 
 def reset():
     global _completed
-    _completed = 0
+    with _completed_lock:
+        _completed = 0
