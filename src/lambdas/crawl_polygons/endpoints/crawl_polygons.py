@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 
 import boto3
-from client import VALID_PERIODS, fetch_polygons, rows_to_geojson, validate_periods
+from client import VALID_PERIODS, fetch_polygons, rows_to_geojson, validate_periods, validate_services
 from municipalities import validate_municipalities
 
 S3_BUCKET = os.environ["S3_BUCKET"]
@@ -13,17 +13,19 @@ GIT_SHA = os.environ.get("GIT_SHA", "unknown")
 s3_client = boto3.client("s3")
 
 
-def _parse_event(event: Dict[str, Any]) -> Tuple[List[str], List[str], int, int, int]:
+def _parse_event(event: Dict[str, Any]) -> Tuple[List[str], List[str], List[str], int, int, int]:
     if isinstance(event.get("body"), str):
         body: Dict[str, Any] = json.loads(event["body"])
         municipios: List[str] = body.get("municipios", [])
         periodos: List[str] = body.get("periodos", [])
+        services: List[str] = body.get("services", [])
         limit: int = body.get("limit", 0)
         batch_size: int = body.get("batch_size", 0)
         silver_batch_size: int = body.get("silver_batch_size", 0)
     elif isinstance(event.get("body"), dict):
         municipios = event.get("municipios") or event["body"].get("municipios", [])
         periodos = event.get("periodos") or event["body"].get("periodos", [])
+        services = event.get("services") or event["body"].get("services", [])
         limit = event.get("limit") or event["body"].get("limit", 0)
         batch_size = event.get("batch_size") or event["body"].get("batch_size", 0)
         silver_batch_size = event.get("silver_batch_size") or event["body"].get(
@@ -32,10 +34,11 @@ def _parse_event(event: Dict[str, Any]) -> Tuple[List[str], List[str], int, int,
     else:
         municipios = event.get("municipios", [])
         periodos = event.get("periodos", [])
+        services = event.get("services", [])
         limit = event.get("limit", 0)
         batch_size = event.get("batch_size", 0)
         silver_batch_size = event.get("silver_batch_size", 0)
-    return municipios, periodos, limit, batch_size, silver_batch_size
+    return municipios, periodos, services, limit, batch_size, silver_batch_size
 
 
 def _compute_batches(
@@ -66,7 +69,7 @@ def _upload_to_s3(data: bytes, key: str, metadata: Dict[str, str]) -> str:
 
 
 def handle(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    municipios, periodos, limit, batch_size, silver_batch_size = _parse_event(event)
+    municipios, periodos, services, limit, batch_size, silver_batch_size = _parse_event(event)
 
     if not municipios or not periodos:
         raise ValueError("municipios and periodos are required")
@@ -85,7 +88,12 @@ def handle(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             f"Valid periods: {sorted(VALID_PERIODS.keys())}."
         )
 
-    rows = fetch_polygons(municipios, periodos)
+    if services:
+        invalid_services = validate_services(services)
+        if invalid_services:
+            raise ValueError(f"Invalid services: {invalid_services}")
+
+    rows = fetch_polygons(municipios, periodos, services)
     if limit and limit > 0:
         rows = rows[:limit]
     geojson = rows_to_geojson(rows)
@@ -101,6 +109,8 @@ def handle(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         "timestamp": timestamp,
         "git_sha": GIT_SHA,
     }
+    if services:
+        metadata["services"] = json.dumps(services)
 
     s3_key = _upload_to_s3(
         data=json.dumps(geojson, ensure_ascii=False).encode("utf-8"),

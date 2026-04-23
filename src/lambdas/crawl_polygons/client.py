@@ -67,11 +67,18 @@ VALID_PERIODS: Dict[str, List[str]] = {
     "2024": ["arroz_2024_s1", "papa_2024_s1"],
 }
 
-OUT_FIELDS = "objectid,cultivo,municipio,departamen,periodo,intervalo"
+OUT_FIELDS = "objectid,cultivo,municipio,departamen,periodo,intervalo,area_ha"
 
 
 def validate_periods(periodos: List[str]) -> List[str]:
     return [p for p in periodos if p not in VALID_PERIODS]
+
+
+def validate_services(services: List[str]) -> List[str]:
+    all_services = set()
+    for svc_list in VALID_PERIODS.values():
+        all_services.update(svc_list)
+    return [s for s in services if s not in all_services]
 
 
 def build_services_for_period(periodo: str) -> List[str]:
@@ -105,17 +112,23 @@ def query_service(municipality: str, service: str) -> List[Dict[str, Any]]:
 
 
 def fetch_polygons(
-    municipalities: List[str], periodos: List[str]
+    municipalities: List[str],
+    periodos: List[str],
+    services: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
-    services_cache: Dict[str, List[str]] = {}
     all_rows: List[Dict[str, Any]] = []
 
     for periodo in periodos:
         year = str(periodo)
-        if year not in services_cache:
-            services_cache[year] = build_services_for_period(year)
+        period_services = build_services_for_period(year)
+
+        if services:
+            target_services = [s for s in services if s in period_services]
+        else:
+            target_services = period_services
+
         for municipality in municipalities:
-            for service in services_cache[year]:
+            for service in target_services:
                 rows = query_service(municipality, service)
                 all_rows.extend(rows)
 
