@@ -1,5 +1,5 @@
 {
-  "Comment": "Crop classification data preparation pipeline: polygons -> bronze (Fargate Map) -> silver (Fargate Map) -> gold (SageMaker)",
+  "Comment": "Crop classification data preparation pipeline: polygons -> bronze (Fargate Map) -> silver (Fargate Map) -> gold (Fargate)",
   "StartAt": "CrawlPolygons",
   "States": {
     "CrawlPolygons": {
@@ -201,7 +201,7 @@
               "Environment": [
                 { "Name": "S3_BUCKET", "Value": "${s3_bucket}" },
                 { "Name": "PROCESSING_STEP", "Value": "gold" },
-                { "Name": "POLYGONS_KEY.$": "$.Payload.s3_key" },
+                { "Name": "POLYGONS_KEY", "Value.$": "$.Payload.s3_key" },
                 { "Name": "GIT_SHA", "Value": "${git_sha}" },
                 { "Name": "FEATURE_GROUP_NAME", "Value": "${feature_group_name}" }
               ]
