@@ -1,8 +1,7 @@
 import logging
 import os
-import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from processing.gold import io, stats
 from processing.gold.preprocessor import process_single
@@ -45,15 +44,9 @@ def run() -> tuple[int, int]:
     stats.reset()
 
     wall_start = time.monotonic()
-    stop_event = threading.Event()
-    metrics_thread = threading.Thread(
-        target=stats.log_metrics, args=(stop_event, total), daemon=True
-    )
-    metrics_thread.start()
 
     try:
         from tqdm import tqdm
-
         has_tqdm = True
     except ImportError:
         has_tqdm = False
@@ -62,9 +55,10 @@ def run() -> tuple[int, int]:
     success_count = 0
     error_count = 0
     skip_count = 0
+    results = []
     max_workers = io.get_workers()
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(process_single, path, lineage_cache): idx
             for idx, (path, objectid, sidecar) in enumerate(sidecar_data)
@@ -77,6 +71,7 @@ def run() -> tuple[int, int]:
 
         for future in as_completed(futures):
             result = future.result()
+            results.append(result)
             status = result.get("status") if result else "error"
 
             if status == "ok":
@@ -99,9 +94,6 @@ def run() -> tuple[int, int]:
 
         if pbar:
             pbar.close()
-
-    stop_event.set()
-    metrics_thread.join(timeout=5)
     io.flush_batch()
 
     wall_elapsed = time.monotonic() - wall_start

@@ -1,8 +1,8 @@
 import logging
 import os
-import threading
 import time
 from datetime import datetime, timezone
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import psutil
 import s3fs as s3fs_lib
@@ -31,31 +31,6 @@ LIMIT = int(os.environ.get("LIMIT", "0"))
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-completed = 0
-skipped = 0
-failed = 0
-completed_lock = threading.Lock()
-
-
-def log_metrics(stop_event: threading.Event, total: int):
-    process = psutil.Process()
-    while not stop_event.is_set():
-        cpu = process.cpu_percent(interval=None)
-        mem = process.memory_info()
-        net_io = psutil.net_io_counters()
-        with completed_lock:
-            done = completed
-        logger.info(
-            "METRICS cpu=%.1f%% mem_rss=%.0fMB net_bytes_sent=%.0fMB net_bytes_recv=%.0fMB progress=%d/%d",
-            cpu,
-            mem.rss / 1024 / 1024,
-            net_io.bytes_sent / 1024 / 1024,
-            net_io.bytes_recv / 1024 / 1024,
-            done,
-            total,
-        )
-        stop_event.wait(METRICS_INTERVAL)
-
 
 def _make_sub_parcel(original: ParcelInfo, sub: SubParcel) -> ParcelInfo:
     pid = f"{original.pid}_{sub.suffix}" if sub.suffix else original.pid
@@ -82,16 +57,16 @@ def _modify_sidecar_for_sub(bronze_sidecar: dict, sub: SubParcel) -> dict:
     return modified
 
 
-def process_parcel(
-    bronze_sidecar_key: str, cfg: dict, s3: s3fs_lib.S3FileSystem
-):
-    global completed, skipped, failed
+def process_parcel(bronze_sidecar_key: str, cfg: dict) -> dict:
     original_pid = None
+    result = {"pid": None, "status": "error", "completed": 0, "skipped": 0, "failed": 0}
     try:
+        s3 = s3fs_lib.S3FileSystem(anon=False)
         bronze_sidecar = load_bronze_sidecar(bronze_sidecar_key)
         parcel = parse_parcel_info(bronze_sidecar)
         original_pid = parcel.pid
         logger.info("Processing parcel %s", original_pid)
+        result["pid"] = original_pid
 
         sub_parcels = split_polygon(
             parcel.geometry,
@@ -114,21 +89,20 @@ def process_parcel(
             silver_sidecar = load_silver_sidecar(sub_pid)
             if not should_process(modified_bronze, silver_sidecar, GIT_SHA):
                 logger.info("Sub-parcel %s already processed, skipping", sub_pid)
-                with completed_lock:
-                    skipped += 1
+                result["skipped"] += 1
                 continue
 
             subs_to_process.append((sub, sub_pid, sub_parcel, modified_bronze))
 
         if not subs_to_process:
             logger.info("All sub-parcels of %s already processed", original_pid)
-            return
+            result["status"] = "ok"
+            return result
 
         dataset = load_dataset(original_pid, s3)
         logger.info("Loading dataset into memory for parcel=%s", original_pid)
         dataset = dataset.load()
 
-        any_success = False
         for sub, sub_pid, sub_parcel, modified_bronze in subs_to_process:
             try:
                 ds_copy = dataset.copy(deep=True)
@@ -142,40 +116,33 @@ def process_parcel(
                 )
                 upload_silver_sidecar(sub_pid, silver_sidecar_data)
 
-                any_success = True
-                with completed_lock:
-                    completed += 1
+                result["completed"] += 1
                 logger.info("Sub-parcel %s complete", sub_pid)
 
             except EmptyDatasetError:
                 logger.warning("Sub-parcel %s has no data after preprocessing, skipping", sub_pid)
-                with completed_lock:
-                    skipped += 1
+                result["skipped"] += 1
             except Exception:
                 logger.exception("Failed to process sub-parcel %s", sub_pid)
-                with completed_lock:
-                    failed += 1
+                result["failed"] += 1
+
+        result["status"] = "ok"
 
     except EmptyDatasetError:
         if original_pid:
             logger.warning("Parcel %s has no data after preprocessing, skipping", original_pid)
-        with completed_lock:
-            skipped += 1
+        result["skipped"] += 1
+        result["status"] = "ok"
     except Exception:
         if original_pid:
             logger.exception("Failed to process parcel %s", original_pid)
-        with completed_lock:
-            failed += 1
+        result["failed"] += 1
+
+    return result
 
 
 def main():
-    global completed, skipped, failed
-    completed = 0
-    skipped = 0
-    failed = 0
-
     cfg = load_config()
-    s3 = s3fs_lib.S3FileSystem(anon=False)
 
     POLYGONS_KEY = os.environ.get("POLYGONS_KEY", "")
     if POLYGONS_KEY:
@@ -186,38 +153,38 @@ def main():
     logger.info("Found %d parcels to process (offset=%d, limit=%d)", len(sidecar_keys), OFFSET, LIMIT)
 
     wall_start = time.monotonic()
-    stop_event = threading.Event()
-    metrics_thread = threading.Thread(
-        target=log_metrics, args=(stop_event, len(sidecar_keys)), daemon=True
-    )
-    metrics_thread.start()
+    max_workers = cfg.get("workers", 4)
 
-    try:
-        for bronze_sidecar_key in sidecar_keys:
-            process_parcel(bronze_sidecar_key, cfg, s3)
-    finally:
-        stop_event.set()
-        metrics_thread.join(timeout=5)
+    completed = 0
+    skipped = 0
+    failed = 0
+
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(process_parcel, key, cfg): key
+            for key in sidecar_keys
+        }
+
+        for future in as_completed(futures):
+            result = future.result()
+            completed += result.get("completed", 0)
+            skipped += result.get("skipped", 0)
+            failed += result.get("failed", 0)
 
     wall_elapsed = time.monotonic() - wall_start
-    n_ok = completed
-    n_skipped = skipped
-    n_failed = failed
     n_total = len(sidecar_keys)
     logger.info(
-        "SUMMARY completed=%d skipped=%d failed=%d total=%d wall_time=%.1fs",
-        n_ok,
-        n_skipped,
-        n_failed,
+        "SUMMARY completed=%d skipped=%d failed=%d total=%d wall_time=%.1fs workers=%d",
+        completed,
+        skipped,
+        failed,
         n_total,
         wall_elapsed,
+        max_workers,
     )
-    if n_ok > 0:
-        avg_time = wall_elapsed / n_ok
-        logger.info(
-            "DETAIL avg_time=%.1fs/parcel",
-            avg_time,
-        )
+    if completed > 0:
+        avg_time = wall_elapsed / completed
+        logger.info("DETAIL avg_time=%.1fs/parcel", avg_time)
 
 
 if __name__ == "__main__":
